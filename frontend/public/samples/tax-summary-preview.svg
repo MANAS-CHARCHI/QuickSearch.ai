@@ -1,0 +1,86 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 400" width="100%" height="100%">
+  <defs>
+    <linearGradient id="taxGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF" />
+      <stop offset="100%" stop-color="#F8FAFC" />
+    </linearGradient>
+    <filter id="taxShadow" x="-5%" y="-5%" width="110%" height="110%">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#000000" flood-opacity="0.1" />
+    </filter>
+  </defs>
+
+  <rect x="15" y="15" width="570" height="370" rx="14" fill="url(#taxGrad)" stroke="#E2E8F0" stroke-width="1.5" filter="url(#taxShadow)" />
+
+  <!-- Top Banner -->
+  <g transform="translate(35, 35)">
+    <!-- Shield / Bank Icon -->
+    <rect x="0" y="0" width="30" height="30" rx="6" fill="#0F172A" />
+    <path d="M 15 6 L 24 10 L 24 18 C 24 23 15 26 15 26 C 15 26 6 23 6 18 L 6 10 Z" fill="#38BDF8" />
+
+    <text x="42" y="14" font-family="system-ui, sans-serif" font-size="14" font-weight="700" fill="#0F172A">ANNUAL TAX RETURN &amp; SALARY STATEMENT</text>
+    <text x="42" y="28" font-family="system-ui, sans-serif" font-size="9" fill="#64748B">FORM 16 / TDS SUMMARY &#8226; ASSESSMENT YEAR 2026-27</text>
+    <text x="530" y="14" font-family="monospace" font-size="10" font-weight="600" fill="#16A34A" text-anchor="end">ACK: #ITR-9982410-C</text>
+  </g>
+
+  <line x1="35" y1="75" x2="565" y2="75" stroke="#E2E8F0" stroke-width="1.2" />
+
+  <!-- PAN and Filing Information -->
+  <g transform="translate(35, 95)" font-family="system-ui, sans-serif" font-size="10">
+    <text x="0" y="0" fill="#64748B">TAXPAYER NAME:</text>
+    <text x="110" y="0" font-weight="bold" fill="#0F172A">ALEX M. SHARMA</text>
+
+    <text x="320" y="0" fill="#64748B">PAN NUMBER:</text>
+    <text x="420" y="0" font-weight="bold" font-family="monospace" fill="#DC2626">ABCPS8910Q</text>
+
+    <text x="0" y="20" fill="#64748B">FILING STATUS:</text>
+    <text x="110" y="20" font-weight="bold" fill="#16A34A">E-VERIFIED &amp; PROCESSED</text>
+
+    <text x="320" y="20" fill="#64748B">DATE FILED:</text>
+    <text x="420" y="20" font-weight="bold" fill="#0F172A">12 JUL 2026</text>
+  </g>
+
+  <!-- Metric Summary Cards -->
+  <g transform="translate(35, 135)">
+    <rect x="0" y="0" width="165" height="60" rx="8" fill="#F8FAFC" stroke="#E2E8F0" />
+    <text x="12" y="18" font-family="system-ui, sans-serif" font-size="9" fill="#64748B">Gross Total Income</text>
+    <text x="12" y="44" font-family="system-ui, sans-serif" font-size="16" font-weight="bold" fill="#0F172A">₹ 24,50,000</text>
+
+    <rect x="182" y="0" width="165" height="60" rx="8" fill="#F8FAFC" stroke="#E2E8F0" />
+    <text x="194" y="18" font-family="system-ui, sans-serif" font-size="9" fill="#64748B">Total Deductions (80C/D)</text>
+    <text x="194" y="44" font-family="system-ui, sans-serif" font-size="16" font-weight="bold" fill="#2563EB">₹ 3,50,000</text>
+
+    <rect x="365" y="0" width="165" height="60" rx="8" fill="#F0FDF4" stroke="#DCFCE7" />
+    <text x="377" y="18" font-family="system-ui, sans-serif" font-size="9" fill="#166534">Refund Paid to Bank</text>
+    <text x="377" y="44" font-family="system-ui, sans-serif" font-size="16" font-weight="bold" fill="#16A34A">₹ 42,850</text>
+  </g>
+
+  <!-- Bar Visual Breakdown -->
+  <g transform="translate(35, 215)">
+    <text x="0" y="12" font-family="system-ui, sans-serif" font-size="10" font-weight="bold" fill="#334155">INCOME ALLOCATION &amp; TAX DISTRIBUTION</text>
+
+    <!-- Visual Bar -->
+    <rect x="0" y="24" width="320" height="14" fill="#3B82F6" rx="3" />
+    <rect x="325" y="24" width="120" height="14" fill="#10B981" rx="3" />
+    <rect x="450" y="24" width="80" height="14" fill="#F59E0B" rx="3" />
+
+    <!-- Legend -->
+    <g transform="translate(0, 52)" font-family="system-ui, sans-serif" font-size="9">
+      <circle cx="5" cy="5" r="4" fill="#3B82F6" />
+      <text x="15" y="8" fill="#64748B">Base Salary (65%)</text>
+
+      <circle cx="140" cy="5" r="4" fill="#10B981" />
+      <text x="150" y="8" fill="#64748B">HRA &amp; Exemptions (25%)</text>
+
+      <circle cx="310" cy="5" r="4" fill="#F59E0B" />
+      <text x="320" y="8" fill="#64748B">Net Tax Paid (10%)</text>
+    </g>
+  </g>
+
+  <!-- Bottom Verification Stamp -->
+  <g transform="translate(35, 315)">
+    <line x1="0" y1="0" x2="530" y2="0" stroke="#E2E8F0" stroke-width="1" />
+    <text x="0" y="20" font-family="system-ui, sans-serif" font-size="9" fill="#94A3B8">
+      Digitally signed by Income Tax Department CPC Bengaluru &#8226; Vault City Encrypted Archive
+    </text>
+  </g>
+</svg>

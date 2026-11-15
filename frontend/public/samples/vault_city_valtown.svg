@@ -1,0 +1,250 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 480" width="100%" height="100%">
+  <defs>
+    <style>
+      .ink-line { stroke: #18181B; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+      .thin-ink { stroke: #27272A; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
+      .sketch-hatch { stroke: #27272A; stroke-width: 1; stroke-linecap: round; opacity: 0.35; }
+      .building-label { font-family: system-ui, -apple-system, sans-serif; font-size: 8px; font-weight: 700; letter-spacing: 1px; text-anchor: middle; }
+    </style>
+  </defs>
+
+  <!-- Clean Off-White Warm Canvas Background (Val Town signature style) -->
+  <rect width="920" height="480" fill="#FCFAF6" />
+
+  <!-- Isometric Cobblestone Road / Pathway curving through the town -->
+  <path d="M -40 320 L 260 410 L 960 160 L 960 90 L 230 350 L -40 260 Z" fill="#F1ECE1" opacity="0.75" />
+  <path d="M -20 290 L 245 380 L 940 125" stroke="#E2DAC9" stroke-width="2.5" stroke-dasharray="10 14" fill="none" opacity="0.85" />
+
+  <!-- Cobblestone textures on the road -->
+  <g opacity="0.4" stroke="#D5CBB9" stroke-width="1.2" fill="none">
+    <ellipse cx="120" cy="325" rx="6" ry="3" />
+    <ellipse cx="140" cy="332" rx="7" ry="3.5" />
+    <ellipse cx="165" cy="330" rx="5" ry="2.5" />
+    <ellipse cx="280" cy="370" rx="6" ry="3" />
+    <ellipse cx="310" cy="360" rx="8" ry="4" />
+    <ellipse cx="450" cy="305" rx="7" ry="3.5" />
+    <ellipse cx="580" cy="255" rx="6" ry="3" />
+    <ellipse cx="700" cy="208" rx="8" ry="4" />
+    <ellipse cx="820" cy="165" rx="6" ry="3" />
+  </g>
+
+  <!-- ============================================================== -->
+  <!-- BUILDING 1: CIVIC ARCHIVE & CLOCK TOWER (Warm Cream / Ochre)   -->
+  <!-- ============================================================== -->
+  <g transform="translate(210, 80)">
+    <!-- Tower Roof (Pitched Pyramidal) -->
+    <path d="M 30 -20 L 75 12 L 45 32 Z" fill="#D49A3D" class="ink-line" />
+    <path d="M 30 -20 L -5 12 L 45 32 Z" fill="#E8B052" class="ink-line" />
+    <!-- Tower Spire -->
+    <line x1="30" y1="-20" x2="30" y2="-40" class="ink-line" stroke-width="2.5" />
+    <circle cx="30" cy="-42" r="3.5" fill="#18181B" />
+
+    <!-- Clock Face Chamber -->
+    <path d="M -5 12 L 45 32 L 45 70 L -5 50 Z" fill="#FBF3DB" class="ink-line" />
+    <path d="M 45 32 L 75 12 L 75 50 L 45 70 Z" fill="#EBDDB8" class="ink-line" />
+    <!-- Clock Face -->
+    <ellipse cx="20" cy="42" rx="10" ry="12" fill="#FFFFFF" class="ink-line" />
+    <line x1="20" y1="42" x2="20" y2="34" class="ink-line" stroke-width="1.6" />
+    <line x1="20" y1="42" x2="26" y2="44" class="ink-line" stroke-width="1.6" />
+    <circle cx="20" cy="42" r="1.5" fill="#18181B" />
+
+    <!-- Main Building Body (Isometric) -->
+    <path d="M -20 60 L 50 88 L 50 250 L -20 222 Z" fill="#F7EED5" class="ink-line" />
+    <path d="M 50 88 L 115 55 L 115 217 L 50 250 Z" fill="#E6D7B4" class="ink-line" />
+
+    <!-- Architectural Windows -->
+    <g transform="translate(-6, 95)">
+      <path d="M 0 10 L 16 16 L 16 38 L 0 32 Z" fill="#FFFFFF" class="ink-line" />
+      <path d="M 24 19 L 40 25 L 40 47 L 24 41 Z" fill="#FFFFFF" class="ink-line" />
+      <line x1="8" y1="13" x2="8" y2="35" class="thin-ink" />
+      <line x1="32" y1="22" x2="32" y2="44" class="thin-ink" />
+    </g>
+
+    <!-- Arched Double Door Entrance -->
+    <path d="M 0 170 C 0 156, 36 170, 36 182 L 36 235 L 0 220 Z" fill="#422E1B" class="ink-line" />
+    <ellipse cx="18" cy="174" rx="11" ry="12" fill="#6B4B29" opacity="0.4" />
+    <circle cx="12" cy="202" r="1.8" fill="#F59E0B" />
+    <circle cx="24" cy="207" r="1.8" fill="#F59E0B" />
+
+    <!-- Cornice & Trim -->
+    <line x1="-20" y1="60" x2="50" y2="88" class="ink-line" stroke-width="3" />
+    <line x1="-22" y1="145" x2="48" y2="173" class="sketch-hatch" />
+  </g>
+
+  <!-- ============================================================== -->
+  <!-- BUILDING 2: VAULT ARCHIVE (Terracotta Pink / Peach Watercolor) -->
+  <!-- ============================================================== -->
+  <g transform="translate(370, 75)">
+    <!-- Roof Top (Isometric) -->
+    <path d="M 0 45 L 80 12 L 135 34 L 55 67 Z" fill="#E28E7C" class="ink-line" />
+    <!-- Roof Hatching -->
+    <line x1="18" y1="41" x2="68" y2="21" class="sketch-hatch" />
+    <line x1="36" y1="48" x2="86" y2="28" class="sketch-hatch" />
+    <line x1="54" y1="55" x2="104" y2="35" class="sketch-hatch" />
+
+    <!-- Left Facade (Light Terracotta) -->
+    <path d="M 0 45 L 55 67 L 55 240 L 0 218 Z" fill="#F2A595" class="ink-line" />
+    <!-- Cornice trim -->
+    <path d="M -4 55 L 59 77 L 59 86 L -4 64 Z" fill="#D67B69" class="ink-line" />
+
+    <!-- Right Side (Shadow Terracotta) -->
+    <path d="M 55 67 L 135 34 L 135 207 L 55 240 Z" fill="#D88271" class="ink-line" />
+
+    <!-- Upper Windows -->
+    <path d="M 10 98 L 26 104 L 26 130 L 10 124 Z" fill="#FFFFFF" class="ink-line" />
+    <line x1="18" y1="101" x2="18" y2="127" class="thin-ink" />
+    <line x1="10" y1="114" x2="26" y2="120" class="thin-ink" />
+
+    <path d="M 32 106 L 46 111 L 46 137 L 32 132 Z" fill="#FFFFFF" class="ink-line" />
+    <line x1="39" y1="109" x2="39" y2="135" class="thin-ink" />
+
+    <!-- Big Circular Bank Vault Door on Ground Floor -->
+    <g transform="translate(12, 150)">
+      <path d="M 2 16 L 36 30 L 36 82 L 2 68 Z" fill="#27272A" class="ink-line" />
+      <ellipse cx="19" cy="48" rx="14" ry="17" fill="#E4E4E7" stroke="#18181B" stroke-width="2" />
+      <ellipse cx="19" cy="48" rx="8" ry="10" fill="#A1A1AA" stroke="#18181B" stroke-width="1.8" />
+      <!-- Combination Spokes -->
+      <line x1="19" y1="38" x2="19" y2="58" class="ink-line" />
+      <line x1="11" y1="48" x2="27" y2="48" class="ink-line" />
+      <circle cx="19" cy="48" r="3" fill="#18181B" />
+      <!-- Dial Marks -->
+      <circle cx="19" cy="40" r="1" fill="#18181B" />
+      <circle cx="25" cy="48" r="1" fill="#18181B" />
+      <circle cx="19" cy="56" r="1" fill="#18181B" />
+      <circle cx="13" cy="48" r="1" fill="#18181B" />
+    </g>
+
+    <!-- Signboard "VAULT" -->
+    <path d="M 6 138 L 48 155 L 48 146 L 6 129 Z" fill="#18181B" />
+    <text x="27" y="145" class="building-label" fill="#FFFFFF" transform="rotate(21 27 145)">VAULT</text>
+  </g>
+
+  <!-- ============================================================== -->
+  <!-- BUILDING 3: KEY & LOCK SHOP (Pistachio Sage Green)             -->
+  <!-- ============================================================== -->
+  <g transform="translate(485, 115)">
+    <!-- Roof Top (Isometric) -->
+    <path d="M 0 35 L 75 5 L 125 24 L 50 54 Z" fill="#95A876" class="ink-line" />
+    <!-- Left Facade (Soft Sage Green) -->
+    <path d="M 0 35 L 50 54 L 50 195 L 0 176 Z" fill="#BCCDA1" class="ink-line" />
+    <!-- Right Side Facade (Shadow Green) -->
+    <path d="M 50 54 L 125 24 L 125 165 L 50 195 Z" fill="#A3B588" class="ink-line" />
+
+    <!-- Striped Awning Over Entrance -->
+    <path d="M -3 118 L 53 138 L 47 150 L -9 130 Z" fill="#E4E4E7" class="ink-line" />
+    <!-- Green Awning Stripes -->
+    <path d="M 5 121 L 15 125 L 9 137 L -1 133 Z" fill="#4D7C0F" />
+    <path d="M 23 128 L 33 132 L 27 144 L 17 140 Z" fill="#4D7C0F" />
+    <path d="M 41 135 L 51 139 L 45 151 L 35 147 Z" fill="#4D7C0F" />
+
+    <!-- Cozy Shop Window with Brass Key Display -->
+    <path d="M 8 138 L 42 151 L 42 186 L 8 173 Z" fill="#FFFFFF" class="ink-line" />
+    <!-- Brass Key Silhouette Inside Window -->
+    <g transform="translate(25, 158) rotate(20)">
+      <circle cx="0" cy="0" r="4.5" fill="none" stroke="#B45309" stroke-width="2" />
+      <line x1="0" y1="4.5" x2="0" y2="18" stroke="#B45309" stroke-width="2.2" stroke-linecap="round" />
+      <line x1="0" y1="12" x2="4" y2="12" stroke="#B45309" stroke-width="1.8" />
+      <line x1="0" y1="16" x2="5" y2="16" stroke="#B45309" stroke-width="1.8" />
+    </g>
+
+    <!-- Signboard "KEYS" -->
+    <path d="M 4 104 L 46 120 L 46 112 L 4 96 Z" fill="#2E4A1C" />
+    <text x="24" y="112" class="building-label" fill="#FAF5E9" transform="rotate(21 24 112)">KEYS</text>
+
+    <!-- Top Windows -->
+    <path d="M 12 65 L 24 70 L 24 90 L 12 85 Z" fill="#FFFFFF" class="ink-line" />
+    <path d="M 30 72 L 42 77 L 42 97 L 30 92 Z" fill="#FFFFFF" class="ink-line" />
+  </g>
+
+  <!-- ============================================================== -->
+  <!-- BUILDING 4: DOCS & RECORDS (Lavender / Periwinkle Blue)       -->
+  <!-- ============================================================== -->
+  <g transform="translate(585, 145)">
+    <!-- Roof Top (Isometric) -->
+    <path d="M 0 35 L 85 2 L 140 22 L 55 55 Z" fill="#8892BA" class="ink-line" />
+    <!-- Left Facade (Gentle Lavender Blue) -->
+    <path d="M 0 35 L 55 55 L 55 210 L 0 190 Z" fill="#B4BEDD" class="ink-line" />
+    <!-- Right Facade (Deep Shadow Lavender) -->
+    <path d="M 55 55 L 140 22 L 140 177 L 55 210 Z" fill="#99A4C8" class="ink-line" />
+
+    <!-- Detailed Facade Paneling -->
+    <g transform="translate(10, 75)">
+      <path d="M 2 15 L 20 22 L 20 48 L 2 41 Z" fill="#FFFFFF" class="ink-line" />
+      <path d="M 26 24 L 44 31 L 44 57 L 26 50 Z" fill="#FFFFFF" class="ink-line" />
+      <line x1="11" y1="18" x2="11" y2="44" class="thin-ink" />
+      <line x1="35" y1="27" x2="35" y2="53" class="thin-ink" />
+    </g>
+
+    <!-- Library Arch Entrance -->
+    <path d="M 10 145 C 10 135, 45 148, 45 158 L 45 202 L 10 189 Z" fill="#2E3347" class="ink-line" />
+    <ellipse cx="27" cy="150" rx="14" ry="16" fill="#4B5563" opacity="0.4" />
+
+    <!-- Signboard "ARCHIVE" -->
+    <path d="M 6 128 L 50 144 L 50 136 L 6 120 Z" fill="#1E2333" />
+    <text x="27" y="136" class="building-label" fill="#E0E7FF" transform="rotate(20 27 136)">ARCHIVE</text>
+  </g>
+
+  <!-- ============================================================== -->
+  <!-- HAND-DRAWN STREET LIGHTS & DETAILS ALONG ROAD                  -->
+  <!-- ============================================================== -->
+  <!-- Old-fashioned Cast-iron Street Lamp Post (Left) -->
+  <g transform="translate(180, 290)">
+    <!-- Base -->
+    <ellipse cx="0" cy="55" rx="5" ry="2" fill="#18181B" opacity="0.4" />
+    <line x1="0" y1="55" x2="0" y2="10" stroke="#18181B" stroke-width="2.5" stroke-linecap="round" />
+    <!-- Curved Arm & Lantern -->
+    <path d="M 0 10 Q 0 0 8 2 L 12 4" stroke="#18181B" stroke-width="2" fill="none" />
+    <path d="M 6 4 L 14 7 L 11 16 L 3 13 Z" fill="#FEF08A" stroke="#18181B" stroke-width="1.6" />
+    <ellipse cx="8.5" cy="10" rx="12" ry="12" fill="#FEF08A" opacity="0.25" />
+  </g>
+
+  <!-- Second Street Lamp Post (Center) -->
+  <g transform="translate(560, 260)">
+    <ellipse cx="0" cy="55" rx="5" ry="2" fill="#18181B" opacity="0.4" />
+    <line x1="0" y1="55" x2="0" y2="10" stroke="#18181B" stroke-width="2.5" stroke-linecap="round" />
+    <path d="M 0 10 Q 0 0 8 2 L 12 4" stroke="#18181B" stroke-width="2" fill="none" />
+    <path d="M 6 4 L 14 7 L 11 16 L 3 13 Z" fill="#FEF08A" stroke="#18181B" stroke-width="1.6" />
+  </g>
+
+  <!-- ============================================================== -->
+  <!-- SKETCHY TREES ALONG THE ROAD (Val Town Signature Tree Style)   -->
+  <!-- ============================================================== -->
+  <!-- Tree 1 (Left foreground) -->
+  <g transform="translate(110, 260)">
+    <line x1="12" y1="20" x2="12" y2="65" stroke="#4A3B2C" stroke-width="3" stroke-linecap="round" />
+    <ellipse cx="12" cy="18" rx="16" ry="30" fill="#B2CB96" class="ink-line" />
+    <path d="M 6 8 C 8 2, 16 2, 18 8" class="thin-ink" fill="none" />
+    <line x1="6" y1="18" x2="14" y2="12" class="sketch-hatch" />
+    <line x1="8" y1="26" x2="16" y2="20" class="sketch-hatch" />
+    <ellipse cx="12" cy="67" rx="11" ry="4" fill="#4A3B2C" opacity="0.25" />
+  </g>
+
+  <!-- Tree 2 (Between Tower and Vault) -->
+  <g transform="translate(345, 230)">
+    <line x1="10" y1="20" x2="10" y2="60" stroke="#4A3B2C" stroke-width="3" stroke-linecap="round" />
+    <ellipse cx="10" cy="18" rx="14" ry="26" fill="#A7C28C" class="ink-line" />
+    <line x1="4" y1="18" x2="12" y2="12" class="sketch-hatch" />
+    <line x1="6" y1="26" x2="14" y2="20" class="sketch-hatch" />
+    <ellipse cx="10" cy="62" rx="10" ry="3.5" fill="#4A3B2C" opacity="0.25" />
+  </g>
+
+  <!-- Tree 3 (Between Key Shop and Docs) -->
+  <g transform="translate(545, 275)">
+    <line x1="10" y1="20" x2="10" y2="65" stroke="#4A3B2C" stroke-width="3" stroke-linecap="round" />
+    <ellipse cx="10" cy="18" rx="15" ry="28" fill="#B8D098" class="ink-line" />
+    <ellipse cx="10" cy="67" rx="11" ry="4" fill="#4A3B2C" opacity="0.25" />
+  </g>
+
+  <!-- Tree 4 (Far right) -->
+  <g transform="translate(730, 270)">
+    <line x1="10" y1="20" x2="10" y2="70" stroke="#4A3B2C" stroke-width="3" stroke-linecap="round" />
+    <ellipse cx="10" cy="16" rx="16" ry="30" fill="#95B57A" class="ink-line" />
+    <ellipse cx="10" cy="72" rx="12" ry="4.5" fill="#4A3B2C" opacity="0.25" />
+  </g>
+
+  <!-- Subtle Hand-drawn Accent Doodles & Birds in Sky -->
+  <path d="M 60 70 Q 70 60 80 70 Q 90 60 100 70" stroke="#8E8578" stroke-width="1.8" stroke-linecap="round" fill="none" opacity="0.6" />
+  <path d="M 140 50 Q 148 42 156 50 Q 164 42 172 50" stroke="#8E8578" stroke-width="1.6" stroke-linecap="round" fill="none" opacity="0.5" />
+  <circle cx="820" cy="380" r="2.5" fill="#D4C5B0" />
+  <circle cx="835" cy="375" r="1.8" fill="#D4C5B0" />
+</svg>
