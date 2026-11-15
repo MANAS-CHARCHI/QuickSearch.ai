@@ -142,10 +142,10 @@ export const AuthView: React.FC<AuthViewProps> = ({
       </header>
 
       {/* Main Container */}
-      <main className="flex-1 flex flex-col items-center justify-center max-w-5xl mx-auto w-full px-4 py-6 md:py-8">
+      <main className="flex-1 flex flex-col items-center justify-center max-w-6xl mx-auto w-full px-4 py-6 md:py-8">
         <div className="w-full grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-start">
           {/* Left Column: Form Card */}
-          <div className="lg:col-span-7 bg-white dark:bg-[#121216] border border-stone-200 dark:border-stone-800 rounded-2xl p-6 sm:p-7 shadow-val transition-all">
+          <div className="lg:col-span-6 bg-white dark:bg-[#121216] border border-stone-200 dark:border-stone-800 rounded-2xl p-6 sm:p-7 shadow-val transition-all">
             {/* Title & Subtitle */}
             <div className="mb-6 space-y-1">
               {mode === 'forgot_password' && (
@@ -365,8 +365,8 @@ export const AuthView: React.FC<AuthViewProps> = ({
             </div>
           </div>
 
-          {/* Right Column: Val Town Style Illustration Card (Desktop) */}
-          <div className="hidden lg:flex flex-col space-y-4 lg:col-span-5">
+          {/* Right Column: Val Town Style Live Animated Illustration Card (Desktop) */}
+          <div className="hidden lg:flex flex-col space-y-4 lg:col-span-6">
             <AuthIllustration />
           </div>
         </div>
