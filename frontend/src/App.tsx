@@ -425,9 +425,17 @@ export function App() {
       />
 
       {/* Main Content Area */}
-      <main className="flex-1 w-full max-w-5xl mx-auto px-3 sm:px-4 py-4 sm:py-6 pb-24 md:pb-8">
+      <main
+        className={`flex-1 w-full max-w-5xl mx-auto transition-all ${
+          displayedTab === 'chat'
+            ? 'p-0 sm:px-4 sm:py-5 md:py-6 sm:pb-8 h-[calc(100vh-3.5rem)] h-[calc(100dvh-3.5rem)] sm:h-auto overflow-hidden sm:overflow-visible flex flex-col'
+            : 'px-3 sm:px-4 py-4 sm:py-6 pb-24 md:pb-8 min-h-0'
+        }`}
+      >
         <div
           className={`w-full ${
+            displayedTab === 'chat' ? 'h-full flex-1 flex flex-col min-h-0 overflow-hidden' : ''
+          } ${
             transitionStage === 'shutting-down'
               ? 'animate-section-shutdown'
               : transitionStage === 'running-in'
