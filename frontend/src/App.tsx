@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Navigation } from './components/Navigation';
 import { VaultView } from './components/VaultView';
 import { UploadView } from './components/UploadView';
@@ -12,7 +12,14 @@ import { X, FileText, Download, ChevronLeft, ChevronRight, Layers } from 'lucide
 
 export function App() {
   // Requirement: AI Assistant chatbot is the default active view on start
+  // currentTab controls immediate navbar indicator feedback
   const [currentTab, setCurrentTab] = useState<TabType>('chat');
+  // displayedTab is the view currently rendered in the DOM (swaps after shutdown)
+  const [displayedTab, setDisplayedTab] = useState<TabType>('chat');
+  // Smooth Section Transition: 'idle' | 'shutting-down' | 'running-in'
+  const [transitionStage, setTransitionStage] = useState<'idle' | 'shutting-down' | 'running-in'>('idle');
+  const targetTabRef = useRef<TabType>('chat');
+
   const [previewDoc, setPreviewDoc] = useState<DocumentFile | null>(null);
   const [activePageIdx, setActivePageIdx] = useState<number>(0);
 
@@ -181,6 +188,44 @@ export function App() {
     fetchStatus();
   }, []);
 
+  // Orchestrated section transition: shuts down active view, then runs target view
+  const handleTabChange = (nextTab: TabType) => {
+    // Dismiss any active document preview modal
+    setPreviewDoc(null);
+
+    // If already on target tab and idle, no-op
+    if (nextTab === targetTabRef.current && transitionStage === 'idle') {
+      return;
+    }
+
+    targetTabRef.current = nextTab;
+    setCurrentTab(nextTab); // Immediate feedback on top/bottom navbar
+
+    // Trigger graceful shutdown of current section
+    setTransitionStage('shutting-down');
+  };
+
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout>;
+    if (transitionStage === 'shutting-down') {
+      // 140ms graceful shutdown (fade & glide down)
+      timer = setTimeout(() => {
+        setDisplayedTab(targetTabRef.current);
+        window.scrollTo({ top: 0, behavior: 'instant' });
+        setTransitionStage('running-in');
+      }, 140);
+    } else if (transitionStage === 'running-in') {
+      // 220ms smooth run-in (fade & rise to place)
+      timer = setTimeout(() => {
+        setTransitionStage('idle');
+        if (targetTabRef.current !== displayedTab) {
+          setDisplayedTab(targetTabRef.current);
+        }
+      }, 220);
+    }
+    return () => clearTimeout(timer);
+  }, [transitionStage, displayedTab]);
+
   // Upload confirmation handler with custom file naming & multi-page bundling
   const handleConfirmUpload = (
     files: {
@@ -253,8 +298,8 @@ export function App() {
       ...prev,
     ]);
 
-    // Switch to Vault view to let user see their newly named files
-    setCurrentTab('vault');
+    // Switch to Vault view with smooth section transition
+    handleTabChange('vault');
   };
 
   // Document Rename Handler
@@ -371,7 +416,7 @@ export function App() {
       {/* Top Navbar & Mobile Bottom Tab Switcher */}
       <Navigation
         currentTab={currentTab}
-        onSelectTab={setCurrentTab}
+        onSelectTab={handleTabChange}
         systemStatus={systemStatus}
         isDark={isDark}
         onToggleTheme={toggleTheme}
@@ -380,44 +425,48 @@ export function App() {
       />
 
       {/* Main Content Area */}
-      <main
-        className={`flex-1 w-full mx-auto ${
-          currentTab === 'chat'
-            ? 'max-w-3xl px-0 sm:px-4 py-0 sm:py-5 pb-20 sm:pb-8'
-            : 'max-w-5xl px-4 py-5 md:py-6 pb-24 md:pb-8'
-        }`}
-      >
-        {currentTab === 'vault' && (
-          <VaultView
-            documents={documents}
-            onDeleteDocument={handleDeleteDocument}
-            onPreviewDocument={(doc) => {
-              setPreviewDoc(doc);
-              setActivePageIdx(0);
-            }}
-            onRenameDocument={handleRenameDocument}
-          />
-        )}
+      <main className="flex-1 w-full max-w-5xl mx-auto px-3 sm:px-4 py-4 sm:py-6 pb-24 md:pb-8">
+        <div
+          className={`w-full ${
+            transitionStage === 'shutting-down'
+              ? 'animate-section-shutdown'
+              : transitionStage === 'running-in'
+              ? 'animate-section-run'
+              : ''
+          }`}
+        >
+          {displayedTab === 'vault' && (
+            <VaultView
+              documents={documents}
+              onDeleteDocument={handleDeleteDocument}
+              onPreviewDocument={(doc) => {
+                setPreviewDoc(doc);
+                setActivePageIdx(0);
+              }}
+              onRenameDocument={handleRenameDocument}
+            />
+          )}
 
-        {currentTab === 'upload' && (
-          <UploadView onConfirmUpload={handleConfirmUpload} />
-        )}
+          {displayedTab === 'upload' && (
+            <UploadView onConfirmUpload={handleConfirmUpload} />
+          )}
 
-        {currentTab === 'chat' && (
-          <ChatView
-            messages={messages}
-            onSendMessage={handleSendMessage}
-            isLoading={isLoading}
-          />
-        )}
+          {displayedTab === 'chat' && (
+            <ChatView
+              messages={messages}
+              onSendMessage={handleSendMessage}
+              isLoading={isLoading}
+            />
+          )}
 
-        {currentTab === 'activity' && (
-          <ActivityView activities={activities} />
-        )}
+          {displayedTab === 'activity' && (
+            <ActivityView activities={activities} />
+          )}
 
-        {currentTab === 'settings' && (
-          <SettingsView onLogout={handleLogout} />
-        )}
+          {displayedTab === 'settings' && (
+            <SettingsView onLogout={handleLogout} />
+          )}
+        </div>
       </main>
 
       {/* In-Browser Document Preview Modal */}

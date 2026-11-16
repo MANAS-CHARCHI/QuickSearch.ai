@@ -58,7 +58,7 @@ export const Navigation: React.FC<NavigationProps> = ({
                 <button
                   key={tab.id}
                   onClick={() => onSelectTab(tab.id)}
-                  className={`flex items-center space-x-1.5 px-3 py-1 rounded-md text-xs font-mono transition-all ${
+                  className={`flex items-center space-x-1.5 px-3 py-1 rounded-md text-xs font-mono transition-all duration-150 cursor-pointer ${
                     isActive
                       ? 'bg-white dark:bg-[#281D16] text-stone-950 dark:text-[#FAF5F0] shadow-sm font-semibold border border-orange-200/60 dark:border-[#3E2C1F]'
                       : 'text-stone-500 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-200'
@@ -111,7 +111,7 @@ export const Navigation: React.FC<NavigationProps> = ({
             <button
               key={tab.id}
               onClick={() => onSelectTab(tab.id)}
-              className={`flex flex-col items-center justify-center py-1 px-3 rounded-lg text-[10px] font-mono transition-all ${
+              className={`flex flex-col items-center justify-center py-1 px-3 rounded-lg text-[10px] font-mono transition-all duration-150 cursor-pointer ${
                 isActive
                   ? 'text-orange-600 dark:text-orange-400 font-bold bg-orange-500/10 dark:bg-orange-950/40'
                   : 'text-stone-400 hover:text-stone-900 dark:hover:text-stone-200'
