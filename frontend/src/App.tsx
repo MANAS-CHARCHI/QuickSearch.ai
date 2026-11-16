@@ -367,7 +367,7 @@ export function App() {
   }
 
   return (
-    <div className="min-h-screen bg-[#FFF5EA] dark:bg-[#140E0A] bg-grid-pattern text-stone-900 dark:text-[#FAF5F0] flex flex-col font-sans transition-colors duration-200">
+    <div className="min-h-screen bg-[#FFF9F4] dark:bg-[#140E0A] bg-grid-pattern text-stone-900 dark:text-[#FAF5F0] flex flex-col font-sans transition-colors duration-200">
       {/* Top Navbar & Mobile Bottom Tab Switcher */}
       <Navigation
         currentTab={currentTab}
@@ -497,7 +497,7 @@ export function App() {
 
             {/* Document Image View */}
             {((previewDoc.pages && previewDoc.pages[activePageIdx]?.url) || previewDoc.previewUrl) ? (
-              <div className="relative rounded-xl overflow-hidden border border-orange-200/60 dark:border-[#382A20] bg-[#FFF5EA] dark:bg-[#140E0A] p-1 flex items-center justify-center">
+              <div className="relative rounded-xl overflow-hidden border border-orange-200/60 dark:border-[#382A20] bg-[#FFF9F4] dark:bg-[#140E0A] p-1 flex items-center justify-center">
                 <img
                   src={(previewDoc.pages && previewDoc.pages[activePageIdx]?.url) || previewDoc.previewUrl}
                   alt={previewDoc.name}
@@ -505,7 +505,7 @@ export function App() {
                 />
               </div>
             ) : (
-              <div className="bg-[#FFF5EA] dark:bg-[#140E0A] p-5 rounded-xl border border-orange-200/60 dark:border-[#382A20] text-center space-y-1.5">
+              <div className="bg-[#FFF9F4] dark:bg-[#140E0A] p-5 rounded-xl border border-orange-200/60 dark:border-[#382A20] text-center space-y-1.5">
                 <div className="w-10 h-10 mx-auto rounded-xl bg-white dark:bg-[#1C1510] flex items-center justify-center text-stone-700 dark:text-stone-300 border border-orange-200/60 dark:border-[#382A20]">
                   <FileText className="w-5 h-5" />
                 </div>
