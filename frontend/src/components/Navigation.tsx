@@ -102,8 +102,8 @@ export const Navigation: React.FC<NavigationProps> = ({
         </div>
       </header>
 
-      {/* Mobile Floating Bottom Dock (Val Town style) */}
-      <nav className="md:hidden fixed bottom-3 left-4 right-4 z-40 bg-white/95 dark:bg-[#1C1510]/95 backdrop-blur-xl border border-orange-200/80 dark:border-[#2D2118] rounded-xl px-2 py-1.5 flex items-center justify-around shadow-xl">
+      {/* Mobile Top Sub-Header Navigation Tabs */}
+      <nav className="md:hidden sticky top-14 z-30 bg-[#FFFCF9]/95 dark:bg-[#140E0A]/95 backdrop-blur-md border-b border-orange-200/50 dark:border-[#2D2118] px-3 py-1.5 flex items-center space-x-1.5 overflow-x-auto no-scrollbar">
         {tabs.map((tab) => {
           const Icon = tab.icon;
           const isActive = currentTab === tab.id;
@@ -111,13 +111,13 @@ export const Navigation: React.FC<NavigationProps> = ({
             <button
               key={tab.id}
               onClick={() => onSelectTab(tab.id)}
-              className={`flex flex-col items-center justify-center py-1 px-3 rounded-lg text-[10px] font-mono transition-all duration-150 cursor-pointer ${
+              className={`flex items-center space-x-1.5 px-3 py-1 rounded-md text-xs font-mono transition-all duration-150 cursor-pointer shrink-0 ${
                 isActive
-                  ? 'text-orange-600 dark:text-orange-400 font-bold bg-orange-500/10 dark:bg-orange-950/40'
-                  : 'text-stone-400 hover:text-stone-900 dark:hover:text-stone-200'
+                  ? 'bg-white dark:bg-[#281D16] text-stone-950 dark:text-[#FAF5F0] shadow-sm font-semibold border border-orange-200/60 dark:border-[#3E2C1F]'
+                  : 'text-stone-500 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-200'
               }`}
             >
-              <Icon className="w-4 h-4 mb-0.5" />
+              <Icon className="w-3.5 h-3.5" />
               <span>{tab.label}</span>
             </button>
           );

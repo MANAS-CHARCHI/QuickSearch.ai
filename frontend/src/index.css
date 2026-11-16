@@ -74,6 +74,15 @@
   background: rgba(255, 255, 255, 0.22);
 }
 
+/* Hide scrollbar for clean horizontal chips */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
 /* Section Transition: 'shut down that' (exit) and 'run another' (enter) */
 @keyframes sectionShutdown {
   0% {

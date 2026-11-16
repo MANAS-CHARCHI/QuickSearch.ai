@@ -428,8 +428,8 @@ export function App() {
       <main
         className={`flex-1 w-full max-w-5xl mx-auto transition-all ${
           displayedTab === 'chat'
-            ? 'p-0 sm:px-4 sm:py-5 md:py-6 sm:pb-8 h-[calc(100vh-3.5rem)] h-[calc(100dvh-3.5rem)] sm:h-auto overflow-hidden sm:overflow-visible flex flex-col'
-            : 'px-3 sm:px-4 py-4 sm:py-6 pb-24 md:pb-8 min-h-0'
+            ? 'p-0 sm:px-4 sm:py-5 md:py-6 sm:pb-8 h-[calc(100vh-5.75rem)] h-[calc(100dvh-5.75rem)] md:h-auto overflow-hidden md:overflow-visible flex flex-col'
+            : 'px-3 sm:px-4 py-4 sm:py-6 pb-12 md:pb-8 min-h-0'
         }`}
       >
         <div
