@@ -67,6 +67,28 @@ export function App() {
     localStorage.removeItem('vault_user');
   };
 
+  const handleUpdateFullName = (newName: string) => {
+    if (!currentUser) return;
+    const updatedUser: UserProfile = {
+      ...currentUser,
+      name: newName,
+      fullName: newName,
+    };
+    setCurrentUser(updatedUser);
+    localStorage.setItem('vault_user', JSON.stringify(updatedUser));
+
+    setActivities((prev) => [
+      {
+        id: `act-${Date.now()}`,
+        action: 'Profile Updated',
+        target: `Full name updated to "${newName}"`,
+        timestamp: new Date().toISOString(),
+        status: 'info',
+      },
+      ...prev,
+    ]);
+  };
+
   const [systemStatus, setSystemStatus] = useState({
     postgres: 'connected',
     chromadb: 'connected',
@@ -472,7 +494,11 @@ export function App() {
           )}
 
           {displayedTab === 'settings' && (
-            <SettingsView onLogout={handleLogout} />
+            <SettingsView
+              currentUser={currentUser}
+              onUpdateFullName={handleUpdateFullName}
+              onLogout={handleLogout}
+            />
           )}
         </div>
       </main>

@@ -1,5 +1,7 @@
-import React from "react";
+import React, { useState } from "react";
 import {
+  User,
+  Check,
   Database,
   Cpu,
   Lock,
@@ -8,12 +10,33 @@ import {
   KeyRound,
   Terminal,
 } from "lucide-react";
+import { UserProfile } from "../types";
 
 interface SettingsViewProps {
+  currentUser?: UserProfile | null;
+  onUpdateFullName?: (newName: string) => void;
   onLogout?: () => void;
 }
 
-export const SettingsView: React.FC<SettingsViewProps> = ({ onLogout }) => {
+export const SettingsView: React.FC<SettingsViewProps> = ({
+  currentUser,
+  onUpdateFullName,
+  onLogout,
+}) => {
+  const [fullName, setFullName] = useState(
+    currentUser?.fullName || currentUser?.name || ""
+  );
+  const [saved, setSaved] = useState(false);
+
+  const handleSave = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (onUpdateFullName) {
+      onUpdateFullName(fullName.trim());
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
+    }
+  };
+
   return (
     <div className="max-w-2xl mx-auto space-y-3 font-mono">
       <div className="pb-1.5 border-b border-stone-200 dark:border-stone-800">
@@ -24,6 +47,56 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ onLogout }) => {
         <p className="text-[10px] text-stone-500 dark:text-stone-400">
           infrastructure limits, credentials, and compliance parameters
         </p>
+      </div>
+
+      {/* User Full Name Card */}
+      <div className="bg-white dark:bg-[#1C1510] border border-orange-200/80 dark:border-[#2D2118] rounded-xl p-3.5 space-y-2.5 shadow-val">
+        <div className="flex items-center justify-between pb-1 border-b border-orange-100 dark:border-[#281D15]">
+          <h3 className="text-xs font-semibold text-stone-900 dark:text-white flex items-center">
+            <User className="w-3.5 h-3.5 mr-1.5 text-stone-500" /> profile
+          </h3>
+          <span className="text-[10px] text-stone-400 font-mono">
+            {currentUser?.email}
+          </span>
+        </div>
+
+        <form onSubmit={handleSave} className="space-y-2">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+            <div className="flex-1">
+              <label className="block text-[10px] text-stone-500 dark:text-stone-400 mb-1 font-mono">
+                full name
+              </label>
+              <input
+                type="text"
+                value={fullName}
+                onChange={(e) => setFullName(e.target.value)}
+                placeholder="Enter your full name..."
+                className="w-full bg-[#FFFCF9] dark:bg-[#251A12] border border-orange-200/80 dark:border-[#382A20] rounded-lg px-3 py-1.5 text-xs text-stone-900 dark:text-white placeholder-stone-400 focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500/20 font-sans"
+              />
+            </div>
+            <div className="sm:self-end">
+              <button
+                type="submit"
+                className="w-full sm:w-auto px-3.5 py-1.5 bg-orange-600 hover:bg-orange-700 text-white dark:bg-orange-500 dark:hover:bg-orange-400 dark:text-stone-950 rounded-lg text-xs font-mono font-semibold transition-all cursor-pointer flex items-center justify-center space-x-1 shadow-xs"
+              >
+                {saved ? (
+                  <>
+                    <Check className="w-3 h-3" />
+                    <span>saved</span>
+                  </>
+                ) : (
+                  <span>update</span>
+                )}
+              </button>
+            </div>
+          </div>
+          {saved && (
+            <p className="text-[10px] text-emerald-600 dark:text-emerald-400 flex items-center space-x-1 font-sans">
+              <Check className="w-3 h-3" />
+              <span>Full name updated successfully</span>
+            </p>
+          )}
+        </form>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
