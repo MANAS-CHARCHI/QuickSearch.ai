@@ -40,14 +40,14 @@ export const ChatView: React.FC<ChatViewProps> = ({
 
   return (
     <div className="w-full max-w-2xl mx-auto flex flex-col h-full sm:h-[calc(100vh-160px)] sm:max-h-[600px] sm:min-h-[440px] bg-[#FFFCF9] sm:bg-white dark:bg-[#140E0A] sm:dark:bg-[#1C1510] border-0 sm:border border-orange-200/80 dark:border-[#2D2118] rounded-none sm:rounded-2xl shadow-none sm:shadow-val overflow-hidden transition-all relative">
-      {/* Desktop Top Bar (Clean 'vc' only) */}
+      {/* Desktop Top Bar (vault assistant written at top) */}
       <div className="hidden sm:flex shrink-0 px-4 py-2.5 border-b border-orange-200/60 dark:border-[#2D2118] items-center justify-between bg-orange-50/60 dark:bg-[#221913] font-mono">
         <div className="flex items-center space-x-2">
           <div className="w-4 h-4 rounded bg-orange-600 flex items-center justify-center text-white text-[9px] font-bold">
             vc
           </div>
-          <span className="text-xs font-bold text-stone-900 dark:text-white">
-            vc
+          <span className="text-xs font-bold text-stone-900 dark:text-white font-sans">
+            vault assistant
           </span>
         </div>
 
@@ -65,8 +65,8 @@ export const ChatView: React.FC<ChatViewProps> = ({
             <div className="w-10 h-10 rounded-xl bg-orange-600 flex items-center justify-center text-white font-bold text-base shadow-sm mb-2 font-mono">
               vc
             </div>
-            <h2 className="text-sm font-bold text-stone-900 dark:text-white font-mono">
-              vc
+            <h2 className="text-sm font-bold text-stone-900 dark:text-white font-sans">
+              vault assistant
             </h2>
             <p className="text-xs text-stone-500 dark:text-stone-400 mt-1">
               ask anything about your encrypted records
@@ -87,10 +87,10 @@ export const ChatView: React.FC<ChatViewProps> = ({
               {msg.sender === "assistant" ? (
                 <>
                   <span className="w-3.5 h-3.5 rounded bg-orange-600 flex items-center justify-center text-white text-[8px] font-bold font-mono">
-                    vc
+                    va
                   </span>
                   <span className="text-[10px] font-bold text-stone-800 dark:text-stone-200 font-mono">
-                    vc
+                    va
                   </span>
                 </>
               ) : (
@@ -119,7 +119,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
                       key={idx}
                       className="text-[9px] bg-orange-500/10 text-orange-700 dark:text-orange-400 px-1.5 py-0.5 rounded border border-orange-500/20 font-mono"
                     >
-                      @vc/{src}
+                      @va/{src}
                     </span>
                   ))}
                 </div>

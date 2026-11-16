@@ -99,9 +99,6 @@ export const AuthView: React.FC<AuthViewProps> = ({
             </span>
             <span className="text-[10px] text-stone-400 font-mono">/</span>
             <span className="text-[11px] text-stone-500 dark:text-stone-400 font-mono">auth</span>
-            <span className="hidden sm:inline-block text-[9px] px-1.5 py-0.2 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 rounded font-mono border border-emerald-500/20">
-              v1.0
-            </span>
           </div>
 
           {/* Right Status & Controls (Identical to Main App) */}

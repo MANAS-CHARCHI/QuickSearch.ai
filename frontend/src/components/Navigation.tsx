@@ -43,9 +43,8 @@ export const Navigation: React.FC<NavigationProps> = ({
               vault city
             </span>
             <span className="text-[10px] text-stone-400 font-mono">/</span>
-            <span className="text-[11px] text-stone-500 dark:text-stone-400 font-mono">personal</span>
-            <span className="hidden sm:inline-block text-[9px] px-1.5 py-0.2 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 rounded font-mono border border-emerald-500/20">
-              v1.0
+            <span className="text-[11px] text-stone-600 dark:text-stone-300 font-mono font-medium truncate max-w-[120px] sm:max-w-[200px]">
+              {currentUser?.name || (currentUser?.email ? currentUser.email.split('@')[0] : 'user')}
             </span>
           </div>
 
