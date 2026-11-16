@@ -1,36 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
-  <defs>
-    <!-- Radiant Brand Orange Gradient -->
-    <linearGradient id="vcOrange" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#FF8528"/>
-      <stop offset="50%" stop-color="#F55902"/>
-      <stop offset="100%" stop-color="#D43B00"/>
-    </linearGradient>
+  <!-- Clean Minimal Squircle Badge in Orange -->
+  <rect x="2" y="2" width="60" height="60" rx="14" fill="#EA580C"/>
 
-    <!-- Glass Top-Edge Highlight for Tactile Polish -->
-    <linearGradient id="edgeSheen" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.5"/>
-      <stop offset="40%" stop-color="#FFFFFF" stop-opacity="0.1"/>
-      <stop offset="100%" stop-color="#000000" stop-opacity="0.2"/>
-    </linearGradient>
-
-    <!-- Subtle Drop Shadow for High-DPI Definition -->
-    <filter id="markDepth" x="-20%" y="-20%" width="140%" height="140%">
-      <feDropShadow dx="0" dy="1.2" stdDeviation="1.2" flood-color="#551500" flood-opacity="0.5"/>
-    </filter>
-  </defs>
-
-  <!-- Orange Squircle Tile -->
-  <rect x="2.5" y="2.5" width="59" height="59" rx="16" fill="url(#vcOrange)"/>
-  <rect x="2.5" y="2.5" width="59" height="59" rx="16" fill="none" stroke="url(#edgeSheen)" stroke-width="1.5"/>
-
-  <!-- 'vc.' Mark Group (Pixel-Perfect Optically Centered) -->
-  <g transform="translate(-1.2, -0.6)" filter="url(#markDepth)">
-    <!-- Bold 'v' Vector Glyph -->
-    <path d="M12 21 h 6.6 l 5.7 16.5 h 0.2 l 5.7 -16.5 h 6.6 l -9.2 23.5 h -6.4 Z" fill="#FFFFFF"/>
-    <!-- Bold 'c' Vector Glyph -->
-    <path d="M50.5 27.5 l -4.2 3.2 c -1.2 -1.8 -2.8 -2.7 -4.8 -2.7 c -4.3 0 -7.2 3.3 -7.2 8 c 0 4.7 2.9 8 7.2 8 c 2 0 3.6 -0.9 4.8 -2.7 l 4.2 3.2 c -2.1 3.2 -5 5 -9.2 5 c -7.8 0 -13.2 -5.7 -13.2 -13.5 c 0 -7.8 5.4 -13.5 13.2 -13.5 c 4.2 0 7.1 1.8 9.2 5 Z" fill="#FFFFFF"/>
-    <!-- Signature Vault City Dot (vc.) -->
-    <circle cx="53" cy="42" r="2.5" fill="#FFFFFF"/>
-  </g>
+  <!-- Minimalist 'vc' Typography -->
+  <text x="32" y="44" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Geist', 'Inter', 'Segoe UI', system-ui, sans-serif" font-size="34px" font-weight="700" letter-spacing="-1.5px" fill="#FFFFFF">vc</text>
 </svg>

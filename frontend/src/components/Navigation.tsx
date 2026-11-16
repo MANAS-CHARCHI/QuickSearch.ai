@@ -38,7 +38,7 @@ export const Navigation: React.FC<NavigationProps> = ({
         <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
           {/* Vault City Brand (Val Town Bold Lowercase Style) */}
           <div className="flex items-center space-x-2.5">
-            <img src="/favicon.svg" alt="Vault City" className="w-6 h-6 rounded-lg shadow-xs shrink-0" />
+            <img src="/favicon.svg" alt="Vault City" className="w-5 h-5 rounded-md shrink-0" />
             <span className="font-extrabold text-base tracking-tight text-stone-950 dark:text-white font-sans">
               vault city
             </span>
