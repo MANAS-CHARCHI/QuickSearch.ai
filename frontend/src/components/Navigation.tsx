@@ -34,7 +34,7 @@ export const Navigation: React.FC<NavigationProps> = ({
   return (
     <>
       {/* Top Vault City Navbar */}
-      <header className="sticky top-0 z-40 bg-[#FAFAF9]/85 dark:bg-[#090A0D]/85 backdrop-blur-md border-b border-stone-200/90 dark:border-stone-800/90 transition-colors">
+      <header className="sticky top-0 z-40 bg-[#FFF5EA]/85 dark:bg-[#090A0D]/85 backdrop-blur-md border-b border-orange-200/60 dark:border-stone-800/90 transition-colors">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
           {/* Vault City Brand (Val Town Bold Lowercase Style) */}
           <div className="flex items-center space-x-2.5">

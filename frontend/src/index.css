@@ -4,9 +4,9 @@
 
 @layer base {
   :root {
-    --val-bg: #FAFAF9;
+    --val-bg: #FFF5EA;
     --val-fg: #0F172A;
-    --val-border: #E2E8F0;
+    --val-border: #FED7AA;
   }
 
   .dark {
@@ -23,9 +23,9 @@
   }
 }
 
-/* Val Town inspired dot grid background */
+/* Val Town inspired dot grid background with warm light orange accent */
 .bg-grid-pattern {
-  background-image: radial-gradient(rgba(0, 0, 0, 0.08) 1px, transparent 1px);
+  background-image: radial-gradient(rgba(234, 88, 12, 0.08) 1px, transparent 1px);
   background-size: 20px 20px;
 }
 

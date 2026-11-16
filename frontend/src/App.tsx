@@ -367,7 +367,7 @@ export function App() {
   }
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] dark:bg-[#0B0F17] bg-grid-pattern text-slate-900 dark:text-[#F0F3F6] flex flex-col font-sans transition-colors duration-200">
+    <div className="min-h-screen bg-[#FFF5EA] dark:bg-[#0B0F17] bg-grid-pattern text-slate-900 dark:text-[#F0F3F6] flex flex-col font-sans transition-colors duration-200">
       {/* Top Navbar & Mobile Bottom Tab Switcher */}
       <Navigation
         currentTab={currentTab}
