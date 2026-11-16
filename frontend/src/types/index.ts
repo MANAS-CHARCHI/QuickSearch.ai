@@ -9,6 +9,13 @@ export interface UserProfile {
   role: 'user' | 'admin';
 }
 
+export interface DocumentPage {
+  pageNumber: number;
+  url: string;
+  name?: string;
+  size?: number;
+}
+
 export interface DocumentFile {
   id: string;
   name: string;
@@ -26,6 +33,15 @@ export interface DocumentFile {
   extractedSnippet?: string;
   thumbnailUrl?: string;
   previewUrl?: string;
+  pages?: DocumentPage[];
+  pageCount?: number;
+}
+
+export interface StagedPage {
+  id: string;
+  file: File;
+  previewUrl?: string;
+  name: string;
 }
 
 export interface StagedFile {
@@ -36,6 +52,7 @@ export interface StagedFile {
   category: 'Identity' | 'Financial' | 'Medical' | 'Personal' | 'Other';
   size: number;
   previewUrl?: string;
+  pages?: StagedPage[];
 }
 
 export interface ChatMessage {

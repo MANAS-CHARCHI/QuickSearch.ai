@@ -6,14 +6,15 @@ import { ChatView } from './components/ChatView';
 import { ActivityView } from './components/ActivityView';
 import { SettingsView } from './components/SettingsView';
 import { AuthView } from './components/AuthView';
-import { TabType, DocumentFile, ChatMessage, ActivityItem, StagedFile, UserProfile } from './types';
+import { TabType, DocumentFile, ChatMessage, ActivityItem, StagedFile, UserProfile, StagedPage, DocumentPage } from './types';
 import { checkHealth } from './services/api';
-import { X, FileText, Download } from 'lucide-react';
+import { X, FileText, Download, ChevronLeft, ChevronRight, Layers } from 'lucide-react';
 
 export function App() {
   // Requirement: AI Assistant chatbot is the default active view on start
   const [currentTab, setCurrentTab] = useState<TabType>('chat');
   const [previewDoc, setPreviewDoc] = useState<DocumentFile | null>(null);
+  const [activePageIdx, setActivePageIdx] = useState<number>(0);
 
   // Day / Night Theme State (defaults to clean Day Mode)
   const [isDark, setIsDark] = useState<boolean>(() => {
@@ -67,18 +68,23 @@ export function App() {
   const [documents, setDocuments] = useState<DocumentFile[]>([
     {
       id: 'doc-1',
-      name: 'aadhaar_card_front.pdf',
-      originalName: 'aadhaar_card_front.pdf',
-      size: 1.4 * 1024 * 1024,
+      name: 'aadhaar_card_national_id.pdf',
+      originalName: 'aadhaar_card_front_and_back.pdf',
+      size: 1.8 * 1024 * 1024,
       mimeType: 'application/pdf',
       uploadedAt: '2026-11-15T10:30:00Z',
       status: 'indexed',
-      documentType: 'Aadhaar Card',
+      documentType: 'Aadhaar Card (Front & Back)',
       category: 'Identity',
-      description: 'UIDAI biometric identity card front with 12-digit UID and address',
+      description: 'UIDAI biometric identity card bundle (Front: 12-digit UID & DOB; Back: Permanent Address & Father Name)',
       isPii: true,
       previewUrl: '/samples/aadhaar-preview.svg',
       thumbnailUrl: '/samples/aadhaar-preview.svg',
+      pageCount: 2,
+      pages: [
+        { pageNumber: 1, url: '/samples/aadhaar-preview.svg', name: 'Front (Identity & UID)', size: 0.9 * 1024 * 1024 },
+        { pageNumber: 2, url: '/samples/aadhaar-preview.svg', name: 'Back (Address & Care of)', size: 0.9 * 1024 * 1024 },
+      ],
     },
     {
       id: 'doc-2',
@@ -175,27 +181,62 @@ export function App() {
     fetchStatus();
   }, []);
 
-  // Upload confirmation handler with custom file naming
+  // Upload confirmation handler with custom file naming & multi-page bundling
   const handleConfirmUpload = (
-    files: { file: File; finalName: string; category: StagedFile['category'] }[]
+    files: {
+      file: File;
+      finalName: string;
+      category: StagedFile['category'];
+      pages?: StagedPage[];
+    }[]
   ) => {
     const newDocs: DocumentFile[] = files.map((item, idx) => {
       const isImg = item.file.type.startsWith('image/');
-      const imgUrl = isImg ? URL.createObjectURL(item.file) : undefined;
+      const hasPages = item.pages && item.pages.length > 0;
+      const isMultiPage = item.pages && item.pages.length > 1;
+
+      let docPages: DocumentPage[] | undefined = undefined;
+      let primaryUrl: string | undefined = undefined;
+
+      if (hasPages && item.pages) {
+        docPages = item.pages.map((p, pIdx) => {
+          const url = p.previewUrl || URL.createObjectURL(p.file);
+          if (pIdx === 0) primaryUrl = url;
+          return {
+            pageNumber: pIdx + 1,
+            url,
+            name: p.name || (pIdx === 0 ? 'Page 1 (Front)' : pIdx === 1 ? 'Page 2 (Back)' : `Page ${pIdx + 1}`),
+            size: p.file.size,
+          };
+        });
+      } else if (isImg) {
+        primaryUrl = URL.createObjectURL(item.file);
+      }
+
+      const totalSize = hasPages && item.pages
+        ? item.pages.reduce((acc, p) => acc + p.file.size, 0)
+        : item.file.size;
+
       return {
         id: `doc-${Date.now()}-${idx}`,
         name: item.finalName,
         originalName: item.file.name,
-        size: item.file.size,
-        mimeType: item.file.type || 'application/octet-stream',
+        size: totalSize,
+        mimeType: isMultiPage ? 'application/pdf' : (item.file.type || 'application/octet-stream'),
         uploadedAt: new Date().toISOString(),
         status: 'indexed',
         category: item.category,
-        documentType: item.category === 'Identity' ? 'Identity Document' : 'Verified File',
-        description: `Encrypted vault file (${item.finalName}) ready for semantic AI search.`,
+        documentType: isMultiPage
+          ? `${item.category} Document (${item.pages?.length} Pages)`
+          : (item.category === 'Identity' ? 'Identity Document' : 'Verified File'),
+        description: isMultiPage
+          ? `Encrypted multi-page document bundle (${item.pages?.length} pages: Front & Back) ready for semantic AI search.`
+          : `Encrypted vault file (${item.finalName}) ready for semantic AI search.`,
         isPii: item.category === 'Identity',
-        previewUrl: imgUrl,
-        thumbnailUrl: imgUrl,
+        previewUrl: primaryUrl,
+        thumbnailUrl: primaryUrl,
+        pages: docPages,
+        pageCount: docPages ? docPages.length : 1,
       };
     });
 
@@ -205,7 +246,7 @@ export function App() {
       {
         id: `act-${Date.now()}`,
         action: 'Files Uploaded & Encrypted',
-        target: `${files.length} document(s) saved to vault`,
+        target: `${files.length} document record(s) saved to vault`,
         timestamp: new Date().toISOString(),
         status: 'success',
       },
@@ -273,9 +314,9 @@ export function App() {
       let sources: string[] = [];
 
       const lower = query.toLowerCase();
-      if (lower.includes('aadhaar')) {
-        reply = "Your Aadhaar number is: 9876 5432 1098. (Extracted securely via Textract OCR from 'aadhaar_card_front.pdf')";
-        sources = ['aadhaar_card_front.pdf [Page 1]'];
+      if (lower.includes('aadhaar') || lower.includes('address')) {
+        reply = "From 'aadhaar_card_national_id.pdf':\n• [Page 1 (Front)]: UID Number is 9876 5432 1098, DOB: 14/08/1995.\n• [Page 2 (Back)]: Registered Address is #42, Koramangala 4th Block, Bengaluru, Karnataka 560034.";
+        sources = ['aadhaar_card_national_id.pdf [Page 1: Front]', 'aadhaar_card_national_id.pdf [Page 2: Back]'];
       } else if (lower.includes('passport')) {
         reply = "Your Passport Number is: Z1234567. Expiry Date: 24 Oct 2032. (Extracted from 'passport_scan.jpg')";
         sources = ['passport_scan.jpg'];
@@ -350,7 +391,10 @@ export function App() {
           <VaultView
             documents={documents}
             onDeleteDocument={handleDeleteDocument}
-            onPreviewDocument={(doc) => setPreviewDoc(doc)}
+            onPreviewDocument={(doc) => {
+              setPreviewDoc(doc);
+              setActivePageIdx(0);
+            }}
             onRenameDocument={handleRenameDocument}
           />
         )}
@@ -408,11 +452,54 @@ export function App() {
               </button>
             </div>
 
+            {/* Multi-Page Navigation Bar */}
+            {previewDoc.pages && previewDoc.pages.length > 1 && (
+              <div className="flex items-center justify-between bg-stone-100 dark:bg-stone-900/80 px-3 py-1.5 rounded-lg border border-stone-200 dark:border-stone-800 text-xs">
+                <button
+                  type="button"
+                  disabled={activePageIdx === 0}
+                  onClick={() => setActivePageIdx((p) => Math.max(0, p - 1))}
+                  className={`flex items-center space-x-1 px-2 py-0.5 rounded transition-colors ${
+                    activePageIdx === 0
+                      ? 'text-stone-300 dark:text-stone-700 cursor-not-allowed'
+                      : 'text-stone-700 dark:text-stone-200 hover:bg-stone-200 dark:hover:bg-stone-800'
+                  }`}
+                >
+                  <ChevronLeft className="w-3.5 h-3.5" />
+                  <span className="text-[10px]">Prev</span>
+                </button>
+
+                <div className="flex items-center space-x-1.5 font-mono text-[10px] text-stone-700 dark:text-stone-300">
+                  <Layers className="w-3 h-3 text-emerald-500" />
+                  <span className="font-semibold">
+                    Page {activePageIdx + 1} of {previewDoc.pages.length}
+                  </span>
+                  <span className="text-stone-400">
+                    ({previewDoc.pages[activePageIdx]?.name || `Page ${activePageIdx + 1}`})
+                  </span>
+                </div>
+
+                <button
+                  type="button"
+                  disabled={activePageIdx >= previewDoc.pages.length - 1}
+                  onClick={() => setActivePageIdx((p) => Math.min(previewDoc.pages!.length - 1, p + 1))}
+                  className={`flex items-center space-x-1 px-2 py-0.5 rounded transition-colors ${
+                    activePageIdx >= previewDoc.pages.length - 1
+                      ? 'text-stone-300 dark:text-stone-700 cursor-not-allowed'
+                      : 'text-stone-700 dark:text-stone-200 hover:bg-stone-200 dark:hover:bg-stone-800'
+                  }`}
+                >
+                  <span className="text-[10px]">Next</span>
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
+
             {/* Document Image View */}
-            {previewDoc.previewUrl ? (
+            {((previewDoc.pages && previewDoc.pages[activePageIdx]?.url) || previewDoc.previewUrl) ? (
               <div className="relative rounded-xl overflow-hidden border border-stone-200 dark:border-stone-800 bg-stone-100 dark:bg-[#0B0D13] p-1 flex items-center justify-center">
                 <img
-                  src={previewDoc.previewUrl}
+                  src={(previewDoc.pages && previewDoc.pages[activePageIdx]?.url) || previewDoc.previewUrl}
                   alt={previewDoc.name}
                   className="w-full max-h-72 object-contain rounded-lg shadow-sm"
                 />
@@ -423,6 +510,27 @@ export function App() {
                   <FileText className="w-5 h-5" />
                 </div>
                 <p className="text-xs font-semibold text-stone-900 dark:text-stone-100">{previewDoc.documentType}</p>
+              </div>
+            )}
+
+            {/* Multi-Page Quick Pill Switcher */}
+            {previewDoc.pages && previewDoc.pages.length > 1 && (
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5">
+                {previewDoc.pages.map((page, idx) => (
+                  <button
+                    key={page.pageNumber || idx}
+                    type="button"
+                    onClick={() => setActivePageIdx(idx)}
+                    className={`flex items-center space-x-1.5 px-2.5 py-1 rounded text-[10px] font-mono transition-all ${
+                      activePageIdx === idx
+                        ? 'bg-stone-900 text-white dark:bg-white dark:text-stone-950 font-bold shadow-xs'
+                        : 'bg-stone-100 dark:bg-stone-900 text-stone-600 dark:text-stone-400 hover:text-stone-900 dark:hover:text-white border border-stone-200 dark:border-stone-800'
+                    }`}
+                  >
+                    <span>p.{idx + 1}</span>
+                    <span className="opacity-75">{idx === 0 ? '(Front)' : idx === 1 ? '(Back)' : ''}</span>
+                  </button>
+                ))}
               </div>
             )}
 
@@ -441,7 +549,7 @@ export function App() {
             <div className="flex items-center justify-between text-xs text-stone-500 dark:text-stone-400 pt-1 border-t border-stone-100 dark:border-stone-800">
               <span className="text-[11px]">Size: {(previewDoc.size / (1024 * 1024)).toFixed(2)} MB</span>
               <a
-                href={previewDoc.previewUrl || '#'}
+                href={(previewDoc.pages && previewDoc.pages[activePageIdx]?.url) || previewDoc.previewUrl || '#'}
                 download={previewDoc.name}
                 className="flex items-center space-x-1.5 px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors"
               >

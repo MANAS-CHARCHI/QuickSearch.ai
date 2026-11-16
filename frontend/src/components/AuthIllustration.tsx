@@ -1,5 +1,5 @@
-import React from 'react';
-import { ShieldCheck, Lock, Sparkles } from 'lucide-react';
+import React from "react";
+import { ShieldCheck, Lock, Sparkles } from "lucide-react";
 
 export const AuthIllustration: React.FC = () => {
   return (
@@ -9,7 +9,9 @@ export const AuthIllustration: React.FC = () => {
         {/* Card Header (Clean & Minimalist, No client.ts tab) */}
         <div className="px-4 py-2.5 bg-stone-100/70 dark:bg-stone-900/80 border-b border-stone-200 dark:border-stone-800 flex items-center justify-between font-mono text-xs">
           <div className="flex items-center space-x-2">
-            <span className="font-semibold text-stone-900 dark:text-white">vault.city</span>
+            <span className="font-semibold text-stone-900 dark:text-white">
+              vault.city
+            </span>
             <span className="text-stone-400">•</span>
             <span className="text-stone-500 text-[11px] flex items-center gap-1 font-sans">
               <Sparkles className="w-3 h-3 text-amber-500 animate-pulse" />
@@ -18,8 +20,9 @@ export const AuthIllustration: React.FC = () => {
           </div>
 
           <div className="flex items-center space-x-1.5">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            <span className="text-[10px] text-stone-500 dark:text-stone-400 font-sans">Zero-Knowledge</span>
+            <span className="text-[10px] text-stone-500 dark:text-stone-400 font-sans">
+              Zero-Knowledge
+            </span>
           </div>
         </div>
 
@@ -31,7 +34,7 @@ export const AuthIllustration: React.FC = () => {
             className="w-full h-auto min-h-[300px] max-h-[440px] object-contain rounded-xl select-none"
             onError={(e) => {
               // Fallback to raster generated hero if SVG fails
-              e.currentTarget.src = '/samples/vault_city_hero.png';
+              e.currentTarget.src = "/samples/vault_city_hero.png";
             }}
           />
         </div>
@@ -55,10 +58,6 @@ export const AuthIllustration: React.FC = () => {
         <div className="flex items-center space-x-2 text-xs text-stone-600 dark:text-stone-400 font-sans">
           <ShieldCheck className="w-4 h-4 text-emerald-500 flex-shrink-0" />
           <span>Zero-knowledge storage</span>
-        </div>
-        <div className="flex items-center space-x-2 text-xs text-stone-600 dark:text-stone-400 font-sans">
-          <ShieldCheck className="w-4 h-4 text-emerald-500 flex-shrink-0" />
-          <span>Biometric &amp; ID masking</span>
         </div>
       </div>
     </div>

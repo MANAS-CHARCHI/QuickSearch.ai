@@ -119,9 +119,16 @@ export const VaultView: React.FC<VaultViewProps> = ({
               <div>
                 {/* Vault City Handle Header */}
                 <div className="flex items-center justify-between pb-2 mb-2.5 border-b border-stone-100 dark:border-stone-800/80 font-mono text-[10px]">
-                  <span className="text-stone-400 truncate max-w-[190px]">
-                    @vault.city/{doc.category?.toLowerCase() || 'docs'}
-                  </span>
+                  <div className="flex items-center space-x-1.5 truncate max-w-[210px]">
+                    <span className="text-stone-400 truncate">
+                      @vault.city/{doc.category?.toLowerCase() || 'docs'}
+                    </span>
+                    {doc.pageCount && doc.pageCount > 1 && (
+                      <span className="px-1.5 py-0.2 rounded bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-300 border border-stone-200 dark:border-stone-700 text-[9px] font-mono shrink-0">
+                        {doc.pageCount} pages
+                      </span>
+                    )}
+                  </div>
                   {doc.isPii && (
                     <span className="px-1.5 py-0.2 rounded bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/25 font-bold text-[9px]">
                       PII
@@ -243,6 +250,11 @@ export const VaultView: React.FC<VaultViewProps> = ({
                     </p>
                   )}
                   <p className="text-[10px] text-stone-400 flex items-center gap-1.5 mt-0.5">
+                    {doc.pageCount && doc.pageCount > 1 && (
+                      <span className="px-1.5 py-0.2 rounded bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-300 border border-stone-200 dark:border-stone-700 text-[9px] font-mono">
+                        {doc.pageCount} pages
+                      </span>
+                    )}
                     <span>{(doc.size / (1024 * 1024)).toFixed(2)} MB</span>
                     <span>•</span>
                     <span>{doc.documentType}</span>

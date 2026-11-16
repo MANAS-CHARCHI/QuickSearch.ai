@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, String, Text
+from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -27,6 +27,8 @@ class FileDocument(Base):
     document_type: Mapped[str | None] = mapped_column(String(128), nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_pii: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    page_count: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    pages_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=datetime.utcnow, nullable=False
     )
