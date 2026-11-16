@@ -1,14 +1,14 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
   <style><![CDATA[
     :root {
-      --bg: #18181B;
-      --border: #27272A;
-      --text: #FAFAF9;
+      --bg: #140E0A;
+      --border: #36271D;
+      --text: #FAF5F0;
     }
     @media (prefers-color-scheme: light) {
       :root {
-        --bg: #FAFAF9;
-        --border: #E7E5E4;
+        --bg: #FFF5EA;
+        --border: #FED7AA;
         --text: #1C1917;
       }
     }

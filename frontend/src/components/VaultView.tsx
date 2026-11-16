@@ -60,7 +60,7 @@ export const VaultView: React.FC<VaultViewProps> = ({
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             placeholder="filter vault (/search)..."
-            className="w-full bg-white dark:bg-[#121216] border border-stone-200 dark:border-stone-800 rounded-lg pl-7 pr-3 py-1.5 text-xs text-stone-900 dark:text-white placeholder-stone-400 focus:outline-none focus:border-stone-400 dark:focus:border-stone-600 transition-colors font-mono"
+            className="w-full bg-white dark:bg-[#1C1510] border border-orange-200/80 dark:border-[#2D2118] rounded-lg pl-7 pr-3 py-1.5 text-xs text-stone-900 dark:text-white placeholder-stone-400 focus:outline-none focus:border-orange-500 dark:focus:border-orange-500 transition-colors font-mono"
           />
         </div>
 
@@ -73,8 +73,8 @@ export const VaultView: React.FC<VaultViewProps> = ({
                 onClick={() => setSelectedCategory(cat)}
                 className={`px-2.5 py-1 rounded text-xs font-mono transition-all ${
                   selectedCategory === cat
-                    ? 'bg-stone-900 text-white dark:bg-white dark:text-stone-950 font-semibold shadow-xs'
-                    : 'bg-white dark:bg-[#121216] text-stone-600 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-200 border border-stone-200 dark:border-stone-800'
+                    ? 'bg-orange-600 text-white dark:bg-orange-500 dark:text-stone-950 font-semibold shadow-xs'
+                    : 'bg-white dark:bg-[#1C1510] text-stone-600 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-200 border border-orange-200/60 dark:border-[#2D2118]'
                 }`}
               >
                 {cat.toLowerCase()}
@@ -82,11 +82,11 @@ export const VaultView: React.FC<VaultViewProps> = ({
             ))}
           </div>
 
-          <div className="hidden sm:flex items-center bg-stone-100 dark:bg-stone-900 p-0.5 rounded border border-stone-200 dark:border-stone-800">
+          <div className="hidden sm:flex items-center bg-orange-100/50 dark:bg-[#1C1510] p-0.5 rounded border border-orange-200/60 dark:border-[#2D2118]">
             <button
               onClick={() => setViewMode('grid')}
               className={`p-1 rounded transition-all ${
-                viewMode === 'grid' ? 'bg-white dark:bg-stone-800 text-stone-900 dark:text-white shadow-sm' : 'text-stone-400'
+                viewMode === 'grid' ? 'bg-white dark:bg-[#281D16] text-stone-900 dark:text-white shadow-sm' : 'text-stone-400'
               }`}
             >
               <LayoutGrid className="w-3 h-3" />
@@ -94,7 +94,7 @@ export const VaultView: React.FC<VaultViewProps> = ({
             <button
               onClick={() => setViewMode('list')}
               className={`p-1 rounded transition-all ${
-                viewMode === 'list' ? 'bg-white dark:bg-stone-800 text-stone-900 dark:text-white shadow-sm' : 'text-stone-400'
+                viewMode === 'list' ? 'bg-white dark:bg-[#281D16] text-stone-900 dark:text-white shadow-sm' : 'text-stone-400'
               }`}
             >
               <List className="w-3 h-3" />
@@ -105,7 +105,7 @@ export const VaultView: React.FC<VaultViewProps> = ({
 
       {/* Document Grid / List without embedded images or colored borders */}
       {filteredDocs.length === 0 ? (
-        <div className="py-16 text-center border border-dashed border-stone-200 dark:border-stone-800 rounded-xl bg-white/40 dark:bg-[#121216]/40 font-mono">
+        <div className="py-16 text-center border border-dashed border-orange-200/80 dark:border-[#2D2118] rounded-xl bg-white/40 dark:bg-[#1C1510]/40 font-mono">
           <FileCode2 className="w-7 h-7 text-stone-300 dark:text-stone-600 mx-auto mb-2" />
           <p className="text-xs text-stone-500 dark:text-stone-400">no files matching query</p>
         </div>
@@ -114,7 +114,7 @@ export const VaultView: React.FC<VaultViewProps> = ({
           {filteredDocs.map((doc) => (
             <div
               key={doc.id}
-              className="bg-white dark:bg-[#121216] border border-stone-200 dark:border-stone-800 hover:border-stone-300 dark:hover:border-stone-700 rounded-xl p-4 transition-all flex flex-col justify-between shadow-val hover:shadow-val-hover group"
+              className="bg-white dark:bg-[#1C1510] border border-orange-200/80 dark:border-[#2D2118] hover:border-orange-300 dark:hover:border-[#4A382A] rounded-xl p-4 transition-all flex flex-col justify-between shadow-val hover:shadow-val-hover group"
             >
               <div>
                 {/* Vault City Handle Header */}
@@ -158,7 +158,7 @@ export const VaultView: React.FC<VaultViewProps> = ({
                   ) : (
                     <h3
                       onClick={() => onPreviewDocument(doc)}
-                      className="text-xs font-semibold text-stone-900 dark:text-white font-mono truncate cursor-pointer hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
+                      className="text-xs font-semibold text-stone-900 dark:text-white font-mono truncate cursor-pointer hover:text-orange-600 dark:hover:text-orange-400 transition-colors"
                       title="Click to view document"
                     >
                       {doc.name}
@@ -217,9 +217,9 @@ export const VaultView: React.FC<VaultViewProps> = ({
         </div>
       ) : (
         /* List Mode */
-        <div className="bg-white dark:bg-[#121216] border border-stone-200 dark:border-stone-800 rounded-xl overflow-hidden shadow-val divide-y divide-stone-100 dark:divide-stone-800 font-mono">
+        <div className="bg-white dark:bg-[#1C1510] border border-orange-200/80 dark:border-[#2D2118] rounded-xl overflow-hidden shadow-val divide-y divide-orange-100 dark:divide-[#2D2118] font-mono">
           {filteredDocs.map((doc) => (
-            <div key={doc.id} className="p-3 sm:px-4 flex items-center justify-between hover:bg-stone-50 dark:hover:bg-stone-900/40 transition-colors text-xs">
+            <div key={doc.id} className="p-3 sm:px-4 flex items-center justify-between hover:bg-orange-50/40 dark:hover:bg-[#281D16]/40 transition-colors text-xs">
               <div className="flex items-center space-x-3 min-w-0 flex-1">
                 <FileCode2 className="w-4 h-4 text-stone-400 flex-shrink-0" />
                 <div className="min-w-0 flex-1">
@@ -243,7 +243,7 @@ export const VaultView: React.FC<VaultViewProps> = ({
                   ) : (
                     <p
                       onClick={() => onPreviewDocument(doc)}
-                      className="text-xs font-semibold text-stone-900 dark:text-white truncate cursor-pointer hover:text-indigo-600 dark:hover:text-indigo-400"
+                      className="text-xs font-semibold text-stone-900 dark:text-white truncate cursor-pointer hover:text-orange-600 dark:hover:text-orange-400"
                       title="Click to view document"
                     >
                       {doc.name}

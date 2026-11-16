@@ -5,14 +5,16 @@
 @layer base {
   :root {
     --val-bg: #FFF5EA;
-    --val-fg: #0F172A;
+    --val-fg: #1C1917;
     --val-border: #FED7AA;
+    --val-card: #FFFFFF;
   }
 
   .dark {
-    --val-bg: #090A0D;
-    --val-fg: #F8FAFC;
-    --val-border: #1E232F;
+    --val-bg: #140E0A;
+    --val-fg: #FAF5F0;
+    --val-border: #36271D;
+    --val-card: #1D1612;
   }
 
   body {
@@ -29,8 +31,9 @@
   background-size: 20px 20px;
 }
 
+/* Dark Mode: Warm glowing amber dot grid */
 .dark .bg-grid-pattern {
-  background-image: radial-gradient(rgba(255, 255, 255, 0.08) 1px, transparent 1px);
+  background-image: radial-gradient(rgba(249, 115, 22, 0.12) 1px, transparent 1px);
   background-size: 20px 20px;
 }
 

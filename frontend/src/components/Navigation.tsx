@@ -34,7 +34,7 @@ export const Navigation: React.FC<NavigationProps> = ({
   return (
     <>
       {/* Top Vault City Navbar */}
-      <header className="sticky top-0 z-40 bg-[#FFF5EA]/85 dark:bg-[#090A0D]/85 backdrop-blur-md border-b border-orange-200/60 dark:border-stone-800/90 transition-colors">
+      <header className="sticky top-0 z-40 bg-[#FFF5EA]/85 dark:bg-[#140E0A]/85 backdrop-blur-md border-b border-orange-200/60 dark:border-[#2D2118] transition-colors">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
           {/* Vault City Brand (Val Town Bold Lowercase Style) */}
           <div className="flex items-center space-x-2.5">
@@ -50,7 +50,7 @@ export const Navigation: React.FC<NavigationProps> = ({
           </div>
 
           {/* Desktop Navigation Tabs (No numbers) */}
-          <nav className="hidden md:flex items-center space-x-1 bg-stone-200/50 dark:bg-stone-900/80 p-0.5 rounded-lg border border-stone-200 dark:border-stone-800">
+          <nav className="hidden md:flex items-center space-x-1 bg-orange-100/50 dark:bg-[#1C1510] p-0.5 rounded-lg border border-orange-200/60 dark:border-[#2D2118]">
             {tabs.map((tab) => {
               const Icon = tab.icon;
               const isActive = currentTab === tab.id;
@@ -60,7 +60,7 @@ export const Navigation: React.FC<NavigationProps> = ({
                   onClick={() => onSelectTab(tab.id)}
                   className={`flex items-center space-x-1.5 px-3 py-1 rounded-md text-xs font-mono transition-all ${
                     isActive
-                      ? 'bg-white dark:bg-stone-800 text-stone-950 dark:text-white shadow-sm font-semibold border border-stone-200/60 dark:border-stone-700/60'
+                      ? 'bg-white dark:bg-[#281D16] text-stone-950 dark:text-[#FAF5F0] shadow-sm font-semibold border border-orange-200/60 dark:border-[#3E2C1F]'
                       : 'text-stone-500 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-200'
                   }`}
                 >
@@ -73,7 +73,7 @@ export const Navigation: React.FC<NavigationProps> = ({
 
           {/* Right Status & Controls (Clean, Non-AI) */}
           <div className="flex items-center space-x-2">
-            <div className="hidden sm:flex items-center space-x-1.5 px-2.5 py-1 rounded-md text-xs font-sans text-stone-500 dark:text-stone-400 bg-stone-100 dark:bg-stone-900 border border-stone-200 dark:border-stone-800">
+            <div className="hidden sm:flex items-center space-x-1.5 px-2.5 py-1 rounded-md text-xs font-sans text-stone-500 dark:text-stone-400 bg-orange-50/60 dark:bg-[#1C1510] border border-orange-200/60 dark:border-[#2D2118]">
               <ShieldCheck className="w-3.5 h-3.5 text-stone-500 dark:text-stone-400" />
               <span>Encrypted</span>
             </div>
@@ -82,7 +82,7 @@ export const Navigation: React.FC<NavigationProps> = ({
             <button
               onClick={onToggleTheme}
               title={isDark ? 'Switch to Day (Light)' : 'Switch to Night (Dark)'}
-              className="p-1.5 rounded-md bg-stone-100 dark:bg-stone-900 border border-stone-200 dark:border-stone-800 text-stone-600 dark:text-stone-300 hover:text-stone-900 dark:hover:text-white transition-all cursor-pointer font-mono"
+              className="p-1.5 rounded-md bg-orange-50/60 dark:bg-[#1C1510] border border-orange-200/60 dark:border-[#2D2118] text-stone-600 dark:text-stone-300 hover:text-stone-900 dark:hover:text-white transition-all cursor-pointer font-mono"
             >
               {isDark ? <Sun className="w-3.5 h-3.5 text-amber-400" /> : <Moon className="w-3.5 h-3.5" />}
             </button>
@@ -92,7 +92,7 @@ export const Navigation: React.FC<NavigationProps> = ({
               <button
                 onClick={onLogout}
                 title="Sign Out"
-                className="flex items-center space-x-1 px-2.5 py-1 rounded-md text-xs font-mono text-stone-500 hover:text-stone-900 dark:text-stone-400 dark:hover:text-white bg-stone-100 dark:bg-stone-900 border border-stone-200 dark:border-stone-800 transition-colors cursor-pointer"
+                className="flex items-center space-x-1 px-2.5 py-1 rounded-md text-xs font-mono text-stone-500 hover:text-stone-900 dark:text-stone-400 dark:hover:text-white bg-orange-50/60 dark:bg-[#1C1510] border border-orange-200/60 dark:border-[#2D2118] transition-colors cursor-pointer"
               >
                 <LogOut className="w-3.5 h-3.5" />
                 <span className="hidden sm:inline">Sign Out</span>
@@ -103,7 +103,7 @@ export const Navigation: React.FC<NavigationProps> = ({
       </header>
 
       {/* Mobile Floating Bottom Dock (Val Town style) */}
-      <nav className="md:hidden fixed bottom-3 left-4 right-4 z-40 bg-white/95 dark:bg-stone-900/95 backdrop-blur-xl border border-stone-200 dark:border-stone-800 rounded-xl px-2 py-1.5 flex items-center justify-around shadow-xl">
+      <nav className="md:hidden fixed bottom-3 left-4 right-4 z-40 bg-white/95 dark:bg-[#1C1510]/95 backdrop-blur-xl border border-orange-200/80 dark:border-[#2D2118] rounded-xl px-2 py-1.5 flex items-center justify-around shadow-xl">
         {tabs.map((tab) => {
           const Icon = tab.icon;
           const isActive = currentTab === tab.id;
@@ -113,7 +113,7 @@ export const Navigation: React.FC<NavigationProps> = ({
               onClick={() => onSelectTab(tab.id)}
               className={`flex flex-col items-center justify-center py-1 px-3 rounded-lg text-[10px] font-mono transition-all ${
                 isActive
-                  ? 'text-indigo-600 dark:text-indigo-400 font-bold bg-indigo-50/80 dark:bg-indigo-950/40'
+                  ? 'text-orange-600 dark:text-orange-400 font-bold bg-orange-500/10 dark:bg-orange-950/40'
                   : 'text-stone-400 hover:text-stone-900 dark:hover:text-stone-200'
               }`}
             >

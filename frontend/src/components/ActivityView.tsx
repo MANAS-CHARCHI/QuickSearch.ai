@@ -9,7 +9,7 @@ interface ActivityViewProps {
 export const ActivityView: React.FC<ActivityViewProps> = ({ activities }) => {
   return (
     <div className="max-w-2xl mx-auto space-y-3 font-mono">
-      <div className="flex items-center justify-between pb-1.5 border-b border-stone-200 dark:border-stone-800">
+      <div className="flex items-center justify-between pb-1.5 border-b border-orange-200/80 dark:border-[#2D2118]">
         <div>
           <h2 className="text-xs font-semibold text-stone-900 dark:text-white flex items-center">
             <Terminal className="w-3.5 h-3.5 mr-1.5 text-stone-500" />
@@ -24,11 +24,11 @@ export const ActivityView: React.FC<ActivityViewProps> = ({ activities }) => {
         </span>
       </div>
 
-      <div className="divide-y divide-stone-100 dark:divide-stone-800 bg-white dark:bg-[#121216] border border-stone-200 dark:border-stone-800 rounded-xl overflow-hidden shadow-val font-mono">
+      <div className="divide-y divide-orange-100 dark:divide-[#2D2118] bg-white dark:bg-[#1C1510] border border-orange-200/80 dark:border-[#2D2118] rounded-xl overflow-hidden shadow-val font-mono">
         {activities.map((item) => (
           <div
             key={item.id}
-            className="p-2.5 sm:px-3 flex items-center justify-between hover:bg-stone-50 dark:hover:bg-stone-900/40 transition-colors text-xs"
+            className="p-2.5 sm:px-3 flex items-center justify-between hover:bg-orange-50/40 dark:hover:bg-[#281D16]/40 transition-colors text-xs"
           >
             <div className="flex items-center space-x-2.5 min-w-0">
               <span className="text-stone-400 text-[10px] font-bold">&gt;</span>

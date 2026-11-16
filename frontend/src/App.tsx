@@ -367,7 +367,7 @@ export function App() {
   }
 
   return (
-    <div className="min-h-screen bg-[#FFF5EA] dark:bg-[#0B0F17] bg-grid-pattern text-slate-900 dark:text-[#F0F3F6] flex flex-col font-sans transition-colors duration-200">
+    <div className="min-h-screen bg-[#FFF5EA] dark:bg-[#140E0A] bg-grid-pattern text-stone-900 dark:text-[#FAF5F0] flex flex-col font-sans transition-colors duration-200">
       {/* Top Navbar & Mobile Bottom Tab Switcher */}
       <Navigation
         currentTab={currentTab}
@@ -423,7 +423,7 @@ export function App() {
       {/* In-Browser Document Preview Modal */}
       {previewDoc && (
         <div className="fixed inset-0 z-50 bg-black/60 dark:bg-black/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-4">
-          <div className="bg-white dark:bg-[#11151D] border border-stone-200 dark:border-stone-800 rounded-2xl max-w-lg w-full p-4 space-y-3.5 shadow-2xl font-mono">
+          <div className="bg-white dark:bg-[#1C1510] border border-orange-200/80 dark:border-[#382A20] rounded-2xl max-w-lg w-full p-4 space-y-3.5 shadow-2xl font-mono">
             <div className="flex items-center justify-between pb-2 border-b border-stone-100 dark:border-stone-800">
               <div className="flex items-center space-x-2 min-w-0">
                 <FileText className="w-4 h-4 text-stone-700 dark:text-stone-300 flex-shrink-0" />
@@ -497,7 +497,7 @@ export function App() {
 
             {/* Document Image View */}
             {((previewDoc.pages && previewDoc.pages[activePageIdx]?.url) || previewDoc.previewUrl) ? (
-              <div className="relative rounded-xl overflow-hidden border border-stone-200 dark:border-stone-800 bg-stone-100 dark:bg-[#0B0D13] p-1 flex items-center justify-center">
+              <div className="relative rounded-xl overflow-hidden border border-orange-200/60 dark:border-[#382A20] bg-[#FFF5EA] dark:bg-[#140E0A] p-1 flex items-center justify-center">
                 <img
                   src={(previewDoc.pages && previewDoc.pages[activePageIdx]?.url) || previewDoc.previewUrl}
                   alt={previewDoc.name}
@@ -505,8 +505,8 @@ export function App() {
                 />
               </div>
             ) : (
-              <div className="bg-[#F7F8F4] dark:bg-[#181D26] p-5 rounded-xl border border-stone-200 dark:border-stone-800 text-center space-y-1.5">
-                <div className="w-10 h-10 mx-auto rounded-xl bg-white dark:bg-[#11151D] flex items-center justify-center text-stone-700 dark:text-stone-300 border border-stone-200 dark:border-stone-800">
+              <div className="bg-[#FFF5EA] dark:bg-[#140E0A] p-5 rounded-xl border border-orange-200/60 dark:border-[#382A20] text-center space-y-1.5">
+                <div className="w-10 h-10 mx-auto rounded-xl bg-white dark:bg-[#1C1510] flex items-center justify-center text-stone-700 dark:text-stone-300 border border-orange-200/60 dark:border-[#382A20]">
                   <FileText className="w-5 h-5" />
                 </div>
                 <p className="text-xs font-semibold text-stone-900 dark:text-stone-100">{previewDoc.documentType}</p>
@@ -551,7 +551,7 @@ export function App() {
               <a
                 href={(previewDoc.pages && previewDoc.pages[activePageIdx]?.url) || previewDoc.previewUrl || '#'}
                 download={previewDoc.name}
-                className="flex items-center space-x-1.5 px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors"
+                className="flex items-center space-x-1.5 px-3.5 py-1.5 bg-orange-600 hover:bg-orange-700 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors"
               >
                 <Download className="w-3 h-3" />
                 <span>Download</span>

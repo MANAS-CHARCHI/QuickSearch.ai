@@ -5,9 +5,9 @@ export const AuthIllustration: React.FC = () => {
   return (
     <div className="flex flex-col space-y-3.5 w-full">
       {/* Val Town Live Hand-drawn Isometric Scene Card */}
-      <div className="rounded-2xl overflow-hidden border border-stone-200 dark:border-stone-800 bg-[#FCFAF6] dark:bg-[#0D1017] shadow-val transition-all">
+      <div className="rounded-2xl overflow-hidden border border-orange-200/80 dark:border-[#2D2118] bg-[#FFFBF7] dark:bg-[#1A130E] shadow-val transition-all">
         {/* Card Header (Clean & Minimalist, No client.ts tab) */}
-        <div className="px-4 py-2.5 bg-stone-100/70 dark:bg-stone-900/80 border-b border-stone-200 dark:border-stone-800 flex items-center justify-between font-mono text-xs">
+        <div className="px-4 py-2.5 bg-orange-50/70 dark:bg-[#1C1510] border-b border-orange-200/60 dark:border-[#2D2118] flex items-center justify-between font-mono text-xs">
           <div className="flex items-center space-x-2">
             <span className="font-semibold text-stone-900 dark:text-white">
               vault.city
@@ -27,7 +27,7 @@ export const AuthIllustration: React.FC = () => {
         </div>
 
         {/* Live Animated Isometric Town with Hovering User Character (Prominent & Bigger) */}
-        <div className="relative p-2 sm:p-3 bg-[#FCFAF6] dark:bg-[#0D1017] flex items-center justify-center overflow-hidden min-h-[320px] sm:min-h-[380px]">
+        <div className="relative p-2 sm:p-3 bg-[#FFFBF7] dark:bg-[#1A130E] flex items-center justify-center overflow-hidden min-h-[320px] sm:min-h-[380px]">
           <img
             src="/samples/vault_city_valtown.svg"
             alt="Vault City Live Hand-Drawn Animated Scene with Hovering User"
@@ -39,15 +39,15 @@ export const AuthIllustration: React.FC = () => {
           />
         </div>
 
-        {/* Val Town Signature Announcement Pill (Light Pastel Blue) */}
-        <div className="p-3 bg-[#F0F9FF] dark:bg-[#072439] border-t border-sky-200 dark:border-sky-900/60 flex items-center justify-between text-xs font-sans">
+        {/* Val Town Signature Announcement Pill (Warm Orange Tint) */}
+        <div className="p-3 bg-[#FFF7ED] dark:bg-[#251A12] border-t border-orange-200/70 dark:border-orange-950/60 flex items-center justify-between text-xs font-sans">
           <div className="flex items-center space-x-2">
-            <Lock className="w-3.5 h-3.5 text-sky-600 dark:text-sky-400 flex-shrink-0" />
-            <span className="text-sky-900 dark:text-sky-200 font-medium text-[11px] sm:text-xs">
+            <Lock className="w-3.5 h-3.5 text-orange-600 dark:text-orange-400 flex-shrink-0" />
+            <span className="text-orange-900 dark:text-orange-200 font-medium text-[11px] sm:text-xs">
               Client-side AES-256-GCM encryption is active.
             </span>
           </div>
-          <span className="text-[10px] text-sky-700 dark:text-sky-300 underline font-semibold flex-shrink-0">
+          <span className="text-[10px] text-orange-700 dark:text-orange-300 underline font-semibold flex-shrink-0">
             Read docs &rarr;
           </span>
         </div>

@@ -39,9 +39,9 @@ export const ChatView: React.FC<ChatViewProps> = ({
   };
 
   return (
-    <div className="w-full max-w-2xl mx-auto flex flex-col h-[calc(100vh-130px)] sm:h-[calc(100vh-160px)] sm:max-h-[510px] sm:min-h-[400px] bg-white dark:bg-[#121216] border-0 sm:border border-stone-200 dark:border-stone-800 rounded-none sm:rounded-xl shadow-none sm:shadow-val overflow-hidden transition-all">
+    <div className="w-full max-w-2xl mx-auto flex flex-col h-[calc(100vh-130px)] sm:h-[calc(100vh-160px)] sm:max-h-[510px] sm:min-h-[400px] bg-white dark:bg-[#1C1510] border-0 sm:border border-orange-200/80 dark:border-[#2D2118] rounded-none sm:rounded-xl shadow-none sm:shadow-val overflow-hidden transition-all">
       {/* Clean Assistant Header (Desktop Only to prevent double header on mobile) */}
-      <div className="hidden sm:flex px-4 py-2.5 border-b border-stone-200 dark:border-stone-800 items-center justify-between bg-stone-50/80 dark:bg-[#16161C] font-sans">
+      <div className="hidden sm:flex px-4 py-2.5 border-b border-orange-200/60 dark:border-[#2D2118] items-center justify-between bg-orange-50/60 dark:bg-[#221913] font-sans">
         <div className="flex items-center space-x-2">
           <span className="text-xs font-semibold text-stone-900 dark:text-white">
             Vault Assistant
@@ -118,13 +118,13 @@ export const ChatView: React.FC<ChatViewProps> = ({
 
       {/* Suggested Quick Questions */}
       {messages.length <= 2 && (
-        <div className="px-3 py-2 flex items-center gap-1.5 overflow-x-auto border-t border-stone-200 dark:border-stone-800 bg-stone-50/70 dark:bg-[#16161C]/50 font-sans">
-          <Sparkles className="w-3.5 h-3.5 text-stone-400 flex-shrink-0" />
+        <div className="px-3 py-2 flex items-center gap-1.5 overflow-x-auto border-t border-orange-200/60 dark:border-[#2D2118] bg-orange-50/40 dark:bg-[#221913]/60 font-sans">
+          <Sparkles className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" />
           {quickPrompts.map((prompt, idx) => (
             <button
               key={idx}
               onClick={() => onSendMessage(prompt)}
-              className="text-xs whitespace-nowrap bg-white dark:bg-[#121216] hover:bg-stone-100 dark:hover:bg-stone-800 border border-stone-200 dark:border-stone-800 text-stone-700 dark:text-stone-300 px-2.5 py-1 rounded-lg transition-all cursor-pointer font-sans"
+              className="text-xs whitespace-nowrap bg-white dark:bg-[#1C1510] hover:bg-orange-50/60 dark:hover:bg-[#281D16] border border-orange-200/70 dark:border-[#2D2118] text-stone-700 dark:text-stone-300 px-2.5 py-1 rounded-lg transition-all cursor-pointer font-sans"
             >
               {prompt}
             </button>
@@ -135,7 +135,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
       {/* Chat Input Field */}
       <form
         onSubmit={handleSubmit}
-        className="p-2 sm:p-2.5 border-t border-stone-200 dark:border-stone-800 bg-white dark:bg-[#121216] font-sans"
+        className="p-2 sm:p-2.5 border-t border-orange-200/60 dark:border-[#2D2118] bg-white dark:bg-[#1C1510] font-sans"
       >
         <div className="relative flex items-center">
           <input
@@ -143,12 +143,12 @@ export const ChatView: React.FC<ChatViewProps> = ({
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder="Ask anything about your documents..."
-            className="w-full bg-stone-50 dark:bg-[#181820] border border-stone-200 dark:border-stone-800 rounded-lg pl-3 pr-16 py-2 text-xs text-stone-900 dark:text-white placeholder-stone-400 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/20 transition-all font-sans"
+            className="w-full bg-orange-50/30 dark:bg-[#251A12] border border-orange-200/70 dark:border-[#382A20] rounded-lg pl-3 pr-16 py-2 text-xs text-stone-900 dark:text-white placeholder-stone-400 focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500/20 transition-all font-sans"
           />
           <button
             type="submit"
             disabled={!input.trim() || isLoading}
-            className="absolute right-1 px-3 py-1 bg-stone-900 text-white dark:bg-white dark:text-stone-950 disabled:opacity-20 rounded-md text-xs font-sans font-medium transition-all hover:opacity-90 cursor-pointer flex items-center space-x-1"
+            className="absolute right-1 px-3 py-1 bg-orange-600 hover:bg-orange-700 text-white dark:bg-orange-500 dark:hover:bg-orange-400 dark:text-stone-950 disabled:opacity-20 rounded-md text-xs font-sans font-semibold transition-all hover:opacity-90 cursor-pointer flex items-center space-x-1"
           >
             <span>Ask</span>
           </button>

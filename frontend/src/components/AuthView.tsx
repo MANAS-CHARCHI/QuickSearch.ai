@@ -87,9 +87,9 @@ export const AuthView: React.FC<AuthViewProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-[#FFF5EA] dark:bg-[#0B0F17] bg-grid-pattern text-slate-900 dark:text-[#F0F3F6] flex flex-col font-sans transition-colors duration-200">
+    <div className="min-h-screen bg-[#FFF5EA] dark:bg-[#140E0A] bg-grid-pattern text-stone-900 dark:text-[#FAF5F0] flex flex-col font-sans transition-colors duration-200">
       {/* Top Vault City Navbar (Identical to Main App) */}
-      <header className="sticky top-0 z-40 bg-[#FFF5EA]/85 dark:bg-[#090A0D]/85 backdrop-blur-md border-b border-orange-200/60 dark:border-stone-800/90 transition-colors">
+      <header className="sticky top-0 z-40 bg-[#FFF5EA]/85 dark:bg-[#140E0A]/85 backdrop-blur-md border-b border-orange-200/60 dark:border-[#2D2118] transition-colors">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
           {/* Brand (Identical to Main App) */}
           <div className="flex items-center space-x-2.5">
@@ -106,7 +106,7 @@ export const AuthView: React.FC<AuthViewProps> = ({
 
           {/* Right Status & Controls (Identical to Main App) */}
           <div className="flex items-center space-x-2.5">
-            <div className="hidden sm:flex items-center space-x-1.5 px-2.5 py-1 rounded-md text-xs font-sans text-stone-500 dark:text-stone-400 bg-stone-100 dark:bg-stone-900 border border-stone-200 dark:border-stone-800">
+            <div className="hidden sm:flex items-center space-x-1.5 px-2.5 py-1 rounded-md text-xs font-sans text-stone-500 dark:text-stone-400 bg-orange-50/60 dark:bg-[#1C1510] border border-orange-200/60 dark:border-[#2D2118]">
               <ShieldCheck className="w-3.5 h-3.5 text-stone-500 dark:text-stone-400" />
               <span>Encrypted</span>
             </div>
@@ -146,7 +146,7 @@ export const AuthView: React.FC<AuthViewProps> = ({
       <main className="flex-1 flex flex-col items-center justify-center max-w-6xl mx-auto w-full px-4 py-6 md:py-8">
         <div className="w-full grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-start">
           {/* Left Column: Form Card */}
-          <div className="lg:col-span-6 bg-white dark:bg-[#121216] border border-stone-200 dark:border-stone-800 rounded-2xl p-6 sm:p-7 shadow-val transition-all">
+          <div className="lg:col-span-6 bg-white dark:bg-[#1C1510] border border-orange-200/80 dark:border-[#2D2118] rounded-2xl p-6 sm:p-7 shadow-val transition-all">
             {/* Title & Subtitle */}
             <div className="mb-6 space-y-1">
               {mode === 'forgot_password' && (
@@ -217,7 +217,7 @@ export const AuthView: React.FC<AuthViewProps> = ({
 
                 <div className="relative flex items-center justify-center">
                   <div className="border-t border-stone-200 dark:border-stone-800 w-full" />
-                  <span className="bg-white dark:bg-[#121216] px-2.5 text-[10px] text-stone-400 font-mono uppercase tracking-wider relative">
+                  <span className="bg-white dark:bg-[#1C1510] px-2.5 text-[10px] text-stone-400 font-mono uppercase tracking-wider relative">
                     or continue with email
                   </span>
                 </div>
@@ -305,7 +305,7 @@ export const AuthView: React.FC<AuthViewProps> = ({
               <button
                 type="submit"
                 disabled={isLoading}
-                className="w-full mt-2 py-2.5 px-4 bg-stone-900 hover:bg-stone-800 text-white dark:bg-white dark:text-stone-950 dark:hover:bg-stone-100 rounded-xl text-xs font-semibold font-sans transition-all cursor-pointer flex items-center justify-center space-x-1.5 shadow-sm active:scale-[0.99] disabled:opacity-50"
+                className="w-full mt-2 py-2.5 px-4 bg-orange-600 hover:bg-orange-700 text-white dark:bg-orange-500 dark:hover:bg-orange-400 dark:text-stone-950 rounded-xl text-xs font-semibold font-sans transition-all cursor-pointer flex items-center justify-center space-x-1.5 shadow-sm active:scale-[0.99] disabled:opacity-50"
               >
                 <span>
                   {isLoading

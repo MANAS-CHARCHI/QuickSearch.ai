@@ -7,12 +7,12 @@ export default {
     extend: {
       colors: {
         val: {
-          bg: '#FAFAFA',
+          bg: '#FFF5EA',
           card: '#FFFFFF',
-          border: '#E5E7EB',
-          darkBg: '#0A0A0C',
-          darkCard: '#121216',
-          darkBorder: '#23232A',
+          border: '#FED7AA',
+          darkBg: '#140E0A',
+          darkCard: '#1D1612',
+          darkBorder: '#36271D',
         },
       },
       fontFamily: {
