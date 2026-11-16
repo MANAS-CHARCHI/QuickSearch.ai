@@ -7,7 +7,7 @@ export default {
     extend: {
       colors: {
         val: {
-          bg: '#FFF9F4',
+          bg: '#FFFCF9',
           card: '#FFFFFF',
           border: '#FFEDD5',
           darkBg: '#140E0A',

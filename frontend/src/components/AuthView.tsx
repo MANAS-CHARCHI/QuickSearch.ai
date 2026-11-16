@@ -87,9 +87,9 @@ export const AuthView: React.FC<AuthViewProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-[#FFF9F4] dark:bg-[#140E0A] bg-grid-pattern text-stone-900 dark:text-[#FAF5F0] flex flex-col font-sans transition-colors duration-200">
+    <div className="min-h-screen bg-[#FFFCF9] dark:bg-[#140E0A] bg-grid-pattern text-stone-900 dark:text-[#FAF5F0] flex flex-col font-sans transition-colors duration-200">
       {/* Top Vault City Navbar (Identical to Main App) */}
-      <header className="sticky top-0 z-40 bg-[#FFF9F4]/85 dark:bg-[#140E0A]/85 backdrop-blur-md border-b border-orange-200/50 dark:border-[#2D2118] transition-colors">
+      <header className="sticky top-0 z-40 bg-[#FFFCF9]/85 dark:bg-[#140E0A]/85 backdrop-blur-md border-b border-orange-200/50 dark:border-[#2D2118] transition-colors">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
           {/* Brand (Identical to Main App) */}
           <div className="flex items-center space-x-2.5">
