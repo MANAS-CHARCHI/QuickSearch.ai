@@ -16,6 +16,7 @@ from sqlalchemy import select
 
 from app.core.config import settings
 from app.core.database import get_db
+from app.core.redis import is_token_valid
 from app.models.user import User
 
 logger = logging.getLogger("vaultcity.security")
@@ -59,8 +60,8 @@ def create_access_token(
     expires_delta: Optional[timedelta] = None,
 ) -> str:
     """
-    Generate an RFC 7519 compliant JWT using HMAC-SHA256 (HS256).
-    Standard zero-dependency high-performance implementation.
+    Generate an RFC 7519 compliant JWT access token using HMAC-SHA256 (HS256).
+    Defaults to 15-minute expiration with unique jti and type='access'.
     """
     to_encode = data.copy()
     now = datetime.now(timezone.utc)
@@ -71,6 +72,49 @@ def create_access_token(
 
     header = {"alg": settings.ALGORITHM, "typ": "JWT"}
     payload = {
+        "jti": to_encode.pop("jti", uuid.uuid4().hex),
+        "type": to_encode.pop("type", "access"),
+        **to_encode,
+        "iat": int(now.timestamp()),
+        "exp": int(expire.timestamp()),
+    }
+
+    header_bytes = json.dumps(header, separators=(",", ":")).encode("utf-8")
+    payload_bytes = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+
+    header_b64 = _base64url_encode(header_bytes)
+    payload_b64 = _base64url_encode(payload_bytes)
+
+    signing_input = f"{header_b64}.{payload_b64}".encode("utf-8")
+    signature = hmac.new(
+        settings.SECRET_KEY.encode("utf-8"),
+        signing_input,
+        hashlib.sha256,
+    ).digest()
+    signature_b64 = _base64url_encode(signature)
+
+    return f"{header_b64}.{payload_b64}.{signature_b64}"
+
+
+def create_refresh_token(
+    data: Dict[str, Any],
+    expires_delta: Optional[timedelta] = None,
+) -> str:
+    """
+    Generate an RFC 7519 compliant JWT refresh token using HMAC-SHA256 (HS256).
+    Defaults to 7-day expiration (10,080 minutes) with unique jti and type='refresh'.
+    """
+    to_encode = data.copy()
+    now = datetime.now(timezone.utc)
+    if expires_delta:
+        expire = now + expires_delta
+    else:
+        expire = now + timedelta(minutes=settings.REFRESH_TOKEN_EXPIRE_MINUTES)
+
+    header = {"alg": settings.ALGORITHM, "typ": "JWT"}
+    payload = {
+        "jti": to_encode.pop("jti", uuid.uuid4().hex),
+        "type": "refresh",
         **to_encode,
         "iat": int(now.timestamp()),
         "exp": int(expire.timestamp()),
@@ -148,6 +192,20 @@ def decode_access_token(token: str) -> Dict[str, Any]:
         )
 
 
+def decode_refresh_token(token: str) -> Dict[str, Any]:
+    """
+    Validate and decode a refresh token. Ensures token type is 'refresh' and not expired.
+    """
+    payload = decode_access_token(token)
+    if payload.get("type") != "refresh":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token type for session refresh.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return payload
+
+
 def create_password_reset_token(email: str, user_id: str) -> str:
     """Create a cryptographically signed password reset token with 1-hour expiry."""
     data = {
@@ -182,6 +240,16 @@ async def get_current_user(
         )
 
     payload = decode_access_token(auth.credentials)
+    
+    # Reject refresh tokens or password reset tokens used as API bearer credentials
+    token_type = payload.get("type")
+    if token_type and token_type != "access":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token type for API access. Access token required.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
     user_id_str = payload.get("sub")
     if not user_id_str:
         raise HTTPException(
@@ -189,6 +257,17 @@ async def get_current_user(
             detail="Token missing subject identifier.",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+    # Check JTI map in Redis (O(1) verification)
+    jti = payload.get("jti")
+    if jti:
+        valid = await is_token_valid(jti, user_id=user_id_str)
+        if not valid:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Authentication token has expired or been revoked.",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
 
     try:
         user_uuid = uuid.UUID(user_id_str)

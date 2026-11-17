@@ -7,7 +7,32 @@ export interface UserProfile {
   email: string;
   name?: string;
   fullName?: string;
+  username?: string;
   role: 'user' | 'admin';
+  hasGoogle?: boolean;
+  hasPassword?: boolean;
+}
+
+export interface AuthTokens {
+  accessToken: string;
+  refreshToken: string;
+  tokenType?: string;
+}
+
+export interface AuthResponseData {
+  access_token: string;
+  refresh_token: string;
+  token_type: string;
+  user: {
+    id: string;
+    email: string;
+    username?: string;
+    role: string;
+    is_active: boolean;
+    has_google?: boolean;
+    has_password?: boolean;
+    created_at?: string;
+  };
 }
 
 export interface DocumentPage {

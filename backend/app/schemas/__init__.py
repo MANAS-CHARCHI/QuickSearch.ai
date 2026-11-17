@@ -10,7 +10,9 @@ from app.schemas.auth import (
     AuthResponse,
     ForgotPasswordRequest,
     GoogleAuthRequest,
+    LogoutRequest,
     PasswordResetResponse,
+    RefreshTokenRequest,
     ResetPasswordRequest,
     UserLoginRequest,
     UserRegisterRequest,
@@ -58,6 +60,8 @@ __all__ = [
     "ResetPasswordRequest",
     "PasswordResetResponse",
     "AuthResponse",
+    "RefreshTokenRequest",
+    "LogoutRequest",
     # File
     "DocumentPageSchema",
     "FileDocumentBase",

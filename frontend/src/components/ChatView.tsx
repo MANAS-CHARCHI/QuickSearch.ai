@@ -58,7 +58,7 @@ export const ChatView: React.FC<ChatViewProps> = ({
       </div>
 
       {/* Messages Scroll Area — Scrollable */}
-      <div className="flex-1 overflow-y-auto overscroll-contain p-3.5 sm:p-4 pb-28 sm:pb-4 space-y-3 font-sans min-h-0">
+      <div className="flex-1 overflow-y-auto overscroll-contain p-3.5 sm:p-4 pb-48 sm:pb-4 space-y-3 font-sans min-h-0">
         {/* If no messages yet */}
         {messages.length === 0 && (
           <div className="h-full flex flex-col items-center justify-center text-center p-4 max-w-sm mx-auto my-auto">
@@ -141,8 +141,8 @@ export const ChatView: React.FC<ChatViewProps> = ({
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Writing Slit — Fixed at Bottom on Mobile */}
-      <div className="fixed sm:static bottom-0 left-0 right-0 z-30 bg-[#FFFCF9] sm:bg-white dark:bg-[#140E0A] sm:dark:bg-[#1C1510] border-t border-orange-200/80 dark:border-[#2D2118] p-2.5 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] sm:p-2.5 shadow-sm">
+      {/* Writing Slit — Fixed at Bottom and Over the Sections Navigation Dock on Mobile */}
+      <div className="fixed sm:static bottom-[4.25rem] sm:bottom-0 left-0 right-0 z-30 bg-[#FFFCF9]/95 sm:bg-white dark:bg-[#140E0A]/95 sm:dark:bg-[#1C1510] backdrop-blur-md border-t border-orange-200/80 dark:border-[#2D2118] p-2.5 sm:p-2.5 shadow-sm">
         {/* Suggestion Chips strip above input slit */}
         {messages.length <= 4 && (
           <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-2 px-0.5 max-w-2xl mx-auto">

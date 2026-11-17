@@ -15,13 +15,17 @@ class Settings(BaseSettings):
     CHROMA_PORT: int = 8000
     CHROMA_PERSIST_DIRECTORY: str = "./chroma_db"
     
-    # Security & JWT
+    # Redis Cache & Token Map
+    REDIS_URL: str = "redis://redis:6379/0"
+
+    # Security & JWT (15-min Access, 7-day Refresh)
     SECRET_KEY: str = "default_insecure_secret_key_change_in_production"
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7 days
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 15  # 15 minutes
+    REFRESH_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7 days (10080 minutes)
 
     # Google Social Auth
-    GOOGLE_CLIENT_ID: Optional[str] = None
+    GOOGLE_CLIENT_ID: Optional[str] = "105470440264-7ep9hin2tddk14jba8agmbddbcl6j12r.apps.googleusercontent.com"
 
     # Cloudflare Turnstile
     TURNSTILE_ENABLED: bool = True

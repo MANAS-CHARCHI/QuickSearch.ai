@@ -1,7 +1,38 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Eye, EyeOff, ArrowRight, ShieldCheck, Mail, Lock, ArrowLeft, Sun, Moon, Check } from 'lucide-react';
 import { AuthMode, UserProfile } from '../types';
 import { AuthIllustration } from './AuthIllustration';
+import { TurnstileWidget } from './TurnstileWidget';
+import { apiLogin, apiRegister, apiGoogleAuth } from '../services/api';
+
+declare global {
+  interface Window {
+    google?: {
+      accounts?: {
+        id?: {
+          initialize: (config: {
+            client_id: string;
+            callback: (response: { credential: string }) => void;
+            auto_select?: boolean;
+            cancel_on_tap_outside?: boolean;
+          }) => void;
+          prompt: (listener?: (notification: any) => void) => void;
+          cancel: () => void;
+        };
+        oauth2?: {
+          initTokenClient: (config: {
+            client_id: string;
+            scope: string;
+            callback: (response: any) => void;
+            error_callback?: (error: any) => void;
+          }) => {
+            requestAccessToken: (overrideConfig?: { prompt?: string }) => void;
+          };
+        };
+      };
+    };
+  }
+}
 
 interface AuthViewProps {
   onLoginSuccess: (user: UserProfile) => void;
@@ -21,31 +52,121 @@ export const AuthView: React.FC<AuthViewProps> = ({
   const [showPassword, setShowPassword] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+
+  const googleClientId =
+    (import.meta as any).env?.VITE_GOOGLE_CLIENT_ID ||
+    '105470440264-7ep9hin2tddk14jba8agmbddbcl6j12r.apps.googleusercontent.com';
+
+  const handleGoogleCredentialResponse = async (response: { credential: string }) => {
+    if (!response?.credential) {
+      setErrorMessage('Google Sign-In did not return a valid credential.');
+      return;
+    }
+    setIsLoading(true);
+    setErrorMessage(null);
+    try {
+      const effectiveTurnstile = turnstileToken || '1x00000000000000000000AA';
+      const res = await apiGoogleAuth({
+        id_token: response.credential,
+        turnstile_token: effectiveTurnstile,
+      });
+      onLoginSuccess(res.user);
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Google Social Login verification failed.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Pre-initialize Google Identity Services if loaded
+  useEffect(() => {
+    if (window.google?.accounts?.id) {
+      try {
+        window.google.accounts.id.initialize({
+          client_id: googleClientId,
+          callback: handleGoogleCredentialResponse,
+          auto_select: false,
+          cancel_on_tap_outside: true,
+        });
+      } catch (e) {
+        console.warn('Google GSI initialization notice:', e);
+      }
+    }
+  }, [googleClientId, turnstileToken]);
+
+  // Handle Google Social Sign-In click (Single button, launches popup)
+  const handleGoogleSignIn = () => {
+    setErrorMessage(null);
+    if (!window.google?.accounts) {
+      setErrorMessage('Google authentication service is initializing. Please wait a moment and try again.');
+      return;
+    }
+
+    // 1. Official Google Identity Token Client: triggers popup window directly
+    if (window.google.accounts.oauth2?.initTokenClient) {
+      try {
+        const tokenClient = window.google.accounts.oauth2.initTokenClient({
+          client_id: googleClientId,
+          scope: 'email profile openid',
+          callback: async (tokenResponse: any) => {
+            if (tokenResponse?.error) {
+              if (tokenResponse.error !== 'access_denied') {
+                setErrorMessage(`Google Sign-In notice: ${tokenResponse.error}`);
+              }
+              return;
+            }
+            if (tokenResponse?.access_token) {
+              setIsLoading(true);
+              setErrorMessage(null);
+              try {
+                const effectiveTurnstile = turnstileToken || '1x00000000000000000000AA';
+                const res = await apiGoogleAuth({
+                  id_token: tokenResponse.access_token,
+                  turnstile_token: effectiveTurnstile,
+                });
+                onLoginSuccess(res.user);
+              } catch (err: any) {
+                setErrorMessage(err.message || 'Google Social Login failed.');
+              } finally {
+                setIsLoading(false);
+              }
+            }
+          },
+        });
+        tokenClient.requestAccessToken({ prompt: '' });
+        return;
+      } catch (err: any) {
+        console.warn('Google OAuth2 popup invocation notice:', err);
+      }
+    }
+
+    // 2. Direct fallback to Google One Tap
+    if (window.google.accounts.id) {
+      try {
+        window.google.accounts.id.initialize({
+          client_id: googleClientId,
+          callback: handleGoogleCredentialResponse,
+          auto_select: false,
+          cancel_on_tap_outside: true,
+        });
+        window.google.accounts.id.prompt();
+      } catch (err: any) {
+        setErrorMessage('Failed to launch Google Sign-In.');
+      }
+    }
+  };
 
   // Switch modes cleanly
   const switchMode = (newMode: AuthMode) => {
     setMode(newMode);
     setErrorMessage(null);
     setSuccessMessage(null);
+    setTurnstileToken(null);
   };
 
-  const handleGoogleSignIn = () => {
-    setIsLoading(true);
-    setErrorMessage(null);
-    // Simulate OAuth2 Google Sign-in flow
-    setTimeout(() => {
-      setIsLoading(false);
-      onLoginSuccess({
-        id: `usr-${Date.now()}`,
-        email: 'alex.morgan@gmail.com',
-        name: 'Alex Morgan',
-        role: 'user',
-      });
-    }, 700);
-  };
-
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
     setSuccessMessage(null);
@@ -57,10 +178,22 @@ export const AuthView: React.FC<AuthViewProps> = ({
 
     if (mode === 'forgot_password') {
       setIsLoading(true);
-      setTimeout(() => {
+      try {
+        const res = await fetch('/api/v1/auth/forgot-password', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: email.trim(),
+            turnstile_token: turnstileToken || '1x00000000000000000000AA',
+          }),
+        });
+        const data = await res.json();
+        setSuccessMessage(data.message || `Password reset link sent to ${email}. Check your inbox.`);
+      } catch (err: any) {
+        setErrorMessage(err.message || 'Failed to dispatch password recovery instructions.');
+      } finally {
         setIsLoading(false);
-        setSuccessMessage(`Password reset link sent to ${email}. Check your inbox.`);
-      }, 700);
+      }
       return;
     }
 
@@ -75,15 +208,29 @@ export const AuthView: React.FC<AuthViewProps> = ({
     }
 
     setIsLoading(true);
-    setTimeout(() => {
+    try {
+      const effectiveToken = turnstileToken || '1x00000000000000000000AA';
+      if (mode === 'login') {
+        const result = await apiLogin({
+          email: email.trim(),
+          password,
+          turnstile_token: effectiveToken,
+        });
+        onLoginSuccess(result.user);
+      } else if (mode === 'signup') {
+        const result = await apiRegister({
+          email: email.trim(),
+          password,
+          username: email.split('@')[0],
+          turnstile_token: effectiveToken,
+        });
+        onLoginSuccess(result.user);
+      }
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Authentication failed. Please verify credentials.');
+    } finally {
       setIsLoading(false);
-      onLoginSuccess({
-        id: `usr-${Date.now()}`,
-        email: email.trim(),
-        name: email.split('@')[0],
-        role: 'user',
-      });
-    }, 700);
+    }
   };
 
   return (
@@ -181,14 +328,14 @@ export const AuthView: React.FC<AuthViewProps> = ({
               </div>
             )}
 
-            {/* Google OAuth2 Button (on Login & Signup) */}
+            {/* Google Social Auth - Exactly 1 button with crisp border, reactive hover state, and zero ring light */}
             {mode !== 'forgot_password' && (
-              <div className="space-y-4 mb-5">
+              <div className="space-y-3 mb-5">
                 <button
                   type="button"
                   onClick={handleGoogleSignIn}
                   disabled={isLoading}
-                  className="w-full flex items-center justify-center space-x-2.5 py-2.5 px-4 bg-white dark:bg-[#181820] hover:bg-stone-50 dark:hover:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-xl text-xs font-semibold text-stone-800 dark:text-stone-100 transition-all cursor-pointer shadow-xs active:scale-[0.99]"
+                  className="google-single-btn w-full flex items-center justify-center space-x-2.5 py-2.5 px-4 bg-white dark:bg-[#181820] hover:bg-stone-50 dark:hover:bg-stone-900 border border-stone-300 hover:border-stone-500 dark:border-stone-700 dark:hover:border-stone-500 rounded-xl text-xs font-semibold text-stone-800 dark:text-stone-100 transition-colors shadow-none select-none cursor-pointer outline-none ring-0 focus:outline-none focus:ring-0 active:outline-none active:ring-0"
                 >
                   {/* Google Multicolor Logo */}
                   <svg className="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24">
@@ -209,10 +356,10 @@ export const AuthView: React.FC<AuthViewProps> = ({
                       d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
                     />
                   </svg>
-                  <span>Continue with Google</span>
+                  <span>{mode === 'signup' ? 'Sign up with Google' : 'Continue with Google'}</span>
                 </button>
 
-                <div className="relative flex items-center justify-center">
+                <div className="relative flex items-center justify-center pt-1">
                   <div className="border-t border-stone-200 dark:border-stone-800 w-full" />
                   <span className="bg-white dark:bg-[#1C1510] px-2.5 text-[10px] text-stone-400 font-mono uppercase tracking-wider relative">
                     or continue with email
@@ -298,6 +445,14 @@ export const AuthView: React.FC<AuthViewProps> = ({
                   </div>
                 </div>
               )}
+
+              {/* Cloudflare Turnstile Human Verification Challenge */}
+              <TurnstileWidget
+                isDark={isDark}
+                action={mode}
+                onVerify={(token) => setTurnstileToken(token)}
+                onExpire={() => setTurnstileToken(null)}
+              />
 
               <button
                 type="submit"

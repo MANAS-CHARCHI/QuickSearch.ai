@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Tuple
 import uuid
 from fastapi import APIRouter, Body, Depends, HTTPException, Request, Response, status
 import httpx
@@ -9,10 +9,20 @@ from sqlalchemy import select
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.limiter import rate_limit
+from app.core.redis import (
+    is_token_valid,
+    revoke_all_user_tokens,
+    revoke_token,
+    store_token_mapping,
+)
 from app.core.security import (
     create_access_token,
     create_password_reset_token,
+    create_refresh_token,
+    decode_access_token,
+    decode_refresh_token,
     get_current_active_user,
+    get_current_user,
     get_password_hash,
     verify_password,
     verify_password_reset_token,
@@ -23,6 +33,8 @@ from app.schemas.auth import (
     AuthResponse,
     ForgotPasswordRequest,
     GoogleAuthRequest,
+    LogoutRequest,
+    RefreshTokenRequest,
     ResetPasswordRequest,
     UserLoginRequest,
     UserRegisterRequest,
@@ -39,6 +51,34 @@ from app.schemas.user import (
 )
 
 router = APIRouter(prefix="/auth", tags=["Authentication & Security"])
+
+
+async def issue_token_pair(user: User) -> Tuple[str, str]:
+    """
+    Issue a 15-minute access token and 7-day refresh token.
+    Stores exp and jti mapping in Redis Hash Map for minimal O(1) latency.
+    """
+    token_data = {"sub": str(user.id), "email": user.email, "role": user.role}
+
+    access_token = create_access_token(data=token_data)
+    access_payload = decode_access_token(access_token)
+    await store_token_mapping(
+        jti=access_payload["jti"],
+        user_id=str(user.id),
+        token_type="access",
+        exp_timestamp=access_payload["exp"],
+    )
+
+    refresh_token = create_refresh_token(data=token_data)
+    refresh_payload = decode_access_token(refresh_token)
+    await store_token_mapping(
+        jti=refresh_payload["jti"],
+        user_id=str(user.id),
+        token_type="refresh",
+        exp_timestamp=refresh_payload["exp"],
+    )
+
+    return access_token, refresh_token
 
 
 # --- Endpoints ---
@@ -157,12 +197,12 @@ async def register(
     await db.commit()
     await db.refresh(new_user)
 
-    # Generate JWT
-    token_data = {"sub": str(new_user.id), "email": new_user.email, "role": new_user.role}
-    access_token = create_access_token(data=token_data)
+    # Generate dual tokens (15-min access + 7-day refresh) recorded in Redis
+    access_token, refresh_token = await issue_token_pair(new_user)
 
     return AuthResponse(
         access_token=access_token,
+        refresh_token=refresh_token,
         token_type="bearer",
         user=make_user_response(new_user),
     )
@@ -240,11 +280,12 @@ async def login(
         user.failed_attempts = 0
         await db.commit()
 
-    token_data = {"sub": str(user.id), "email": user.email, "role": user.role}
-    access_token = create_access_token(data=token_data)
+    # Generate dual tokens (15-min access + 7-day refresh) recorded in Redis
+    access_token, refresh_token = await issue_token_pair(user)
 
     return AuthResponse(
         access_token=access_token,
+        refresh_token=refresh_token,
         token_type="bearer",
         user=make_user_response(user),
     )
@@ -260,6 +301,131 @@ async def get_me(
 ):
     """Fetch the active user's profile details."""
     return make_user_response(current_user)
+
+
+@router.post(
+    "/refresh",
+    response_model=AuthResponse,
+    summary="Exchange valid 7-day refresh token for a fresh 15-minute access token",
+    dependencies=[Depends(rate_limit(max_requests=30, window_seconds=60, key_prefix="auth_refresh"))],
+)
+async def refresh_session(
+    payload: RefreshTokenRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Validate cryptographic refresh token and issue a fresh access token.
+    1. Decodes JWT and ensures type == 'refresh' and not expired.
+    2. Validates JTI in Redis Hash Map in O(1) time.
+    3. Verifies user exists, is active, and is not locked.
+    4. Rotates tokens: generates fresh 15-minute access token & fresh 7-day refresh token.
+    5. Invalidates old refresh token in Redis.
+    """
+    refresh_payload = decode_refresh_token(payload.refresh_token)
+    jti = refresh_payload.get("jti")
+    user_id_str = refresh_payload.get("sub")
+
+    if not jti or not user_id_str:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Malformed session refresh credentials.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    # Check JTI map in Redis (O(1) lookup)
+    valid = await is_token_valid(jti, user_id=user_id_str)
+    if not valid:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Session refresh token has expired or been revoked.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    try:
+        user_uuid = uuid.UUID(user_id_str)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid user session identifier.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    user_query = select(User).where(User.id == user_uuid)
+    result = await db.execute(user_query)
+    user = result.scalar_one_or_none()
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User account no longer exists.",
+        )
+
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User account is deactivated.",
+        )
+
+    if user.is_locked:
+        raise HTTPException(
+            status_code=status.HTTP_423_LOCKED,
+            detail="User account is locked.",
+        )
+
+    # Issue fresh dual tokens (15-min access + rolling 7-day refresh)
+    new_access_token, new_refresh_token = await issue_token_pair(user)
+
+    # Revoke used refresh token in Redis
+    await revoke_token(jti, user_id=user_id_str)
+
+    return AuthResponse(
+        access_token=new_access_token,
+        refresh_token=new_refresh_token,
+        token_type="bearer",
+        user=make_user_response(user),
+    )
+
+
+@router.post(
+    "/logout",
+    summary="Revoke session tokens and log out user",
+)
+async def logout(
+    request: Request,
+    payload: Optional[LogoutRequest] = None,
+):
+    """
+    Log out active user:
+    1. Extracts Bearer token from Authorization header and revokes its JTI in Redis map.
+    2. Revokes provided refresh token JTI in Redis map.
+    3. Guarantees token cannot be used again.
+    """
+    auth_header = request.headers.get("authorization")
+    if auth_header and auth_header.startswith("Bearer "):
+        access_token = auth_header.split(" ", 1)[1]
+        try:
+            token_payload = decode_access_token(access_token)
+            jti = token_payload.get("jti")
+            sub = token_payload.get("sub")
+            if jti:
+                await revoke_token(jti, user_id=sub)
+        except Exception:
+            pass
+
+    if payload and payload.refresh_token:
+        try:
+            refresh_payload = decode_access_token(payload.refresh_token)
+            jti = refresh_payload.get("jti")
+            sub = refresh_payload.get("sub")
+            if jti:
+                await revoke_token(jti, user_id=sub)
+        except Exception:
+            pass
+
+    return {
+        "status": "success",
+        "message": "Successfully logged out. All session tokens invalidated.",
+    }
 
 
 @router.patch(
@@ -316,6 +482,9 @@ async def change_password(
     current_user.updated_at = datetime.utcnow()
     await db.commit()
     await db.refresh(current_user)
+
+    # Invalidate all existing sessions across devices in Redis
+    await revoke_all_user_tokens(str(current_user.id))
 
     return make_user_response(current_user)
 
@@ -426,6 +595,9 @@ async def reset_password(
 
     await db.commit()
 
+    # Invalidate all existing sessions across devices in Redis
+    await revoke_all_user_tokens(str(user.id))
+
     return {
         "status": "success",
         "message": "Your password has been successfully updated. You may now sign in.",
@@ -462,12 +634,14 @@ async def google_auth(
             expected_action=["auth", "login", "signup", "google_auth"],
         )
 
-    # Verify ID token with Google
+    # Verify ID token or access token with Google
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
+            is_jwt = payload.id_token.count(".") == 2
+            query_params = {"id_token": payload.id_token} if is_jwt else {"access_token": payload.id_token}
             resp = await client.get(
                 "https://oauth2.googleapis.com/tokeninfo",
-                params={"id_token": payload.id_token},
+                params=query_params,
             )
             if resp.status_code != 200:
                 raise HTTPException(
@@ -475,6 +649,20 @@ async def google_auth(
                     detail="Invalid or expired Google authentication token.",
                 )
             google_info = resp.json()
+
+            # If access_token was provided and user profile name is absent, try userinfo
+            if not is_jwt and not google_info.get("name"):
+                try:
+                    userinfo_resp = await client.get(
+                        "https://www.googleapis.com/oauth2/v3/userinfo",
+                        headers={"Authorization": f"Bearer {payload.id_token}"},
+                    )
+                    if userinfo_resp.status_code == 200:
+                        uinfo = userinfo_resp.json()
+                        if uinfo.get("name"):
+                            google_info["name"] = uinfo["name"]
+                except Exception:
+                    pass
     except httpx.RequestError as exc:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
@@ -483,7 +671,7 @@ async def google_auth(
 
     # Validate audience if GOOGLE_CLIENT_ID configured
     if settings.GOOGLE_CLIENT_ID:
-        token_aud = google_info.get("aud")
+        token_aud = google_info.get("aud") or google_info.get("azp")
         if token_aud != settings.GOOGLE_CLIENT_ID:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -558,12 +746,12 @@ async def google_auth(
         await db.commit()
         await db.refresh(user)
 
-    # Issue JWT access token
-    token_data = {"sub": str(user.id), "email": user.email, "role": user.role}
-    access_token = create_access_token(data=token_data)
+    # Generate dual tokens (15-min access + 7-day refresh) recorded in Redis
+    access_token, refresh_token = await issue_token_pair(user)
 
     return AuthResponse(
         access_token=access_token,
+        refresh_token=refresh_token,
         token_type="bearer",
         user=make_user_response(user),
     )

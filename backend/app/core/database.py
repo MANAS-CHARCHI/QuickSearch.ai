@@ -29,8 +29,27 @@ class Base(DeclarativeBase):
     pass
 
 
+_tables_initialized = False
+
+
+async def init_db() -> None:
+    """Ensure all SQLAlchemy tables are created in PostgreSQL."""
+    global _tables_initialized
+    import app.models  # noqa: F401
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    _tables_initialized = True
+
+
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     """Dependency for acquiring async database sessions."""
+    global _tables_initialized
+    if not _tables_initialized:
+        try:
+            await init_db()
+        except Exception:
+            pass
+
     async with AsyncSessionLocal() as session:
         try:
             yield session

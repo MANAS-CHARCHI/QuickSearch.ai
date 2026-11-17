@@ -121,6 +121,35 @@
   will-change: transform, opacity, filter;
 }
 
+/* Google Social Auth: Single button with crisp border, reactive hover state, and ZERO ring light */
+.google-single-btn {
+  outline: none !important;
+  box-shadow: none !important;
+  -webkit-tap-highlight-color: transparent !important;
+  --tw-ring-shadow: 0 0 #0000 !important;
+  --tw-ring-offset-shadow: 0 0 #0000 !important;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.google-single-btn:hover {
+  outline: none !important;
+  box-shadow: none !important;
+  --tw-ring-shadow: 0 0 #0000 !important;
+  --tw-ring-offset-shadow: 0 0 #0000 !important;
+}
+
+.google-single-btn:focus,
+.google-single-btn:focus-visible,
+.google-single-btn:focus-within,
+.google-single-btn:active {
+  outline: none !important;
+  outline-offset: 0 !important;
+  box-shadow: none !important;
+  --tw-ring-shadow: 0 0 #0000 !important;
+  --tw-ring-offset-shadow: 0 0 #0000 !important;
+  --tw-ring-color: transparent !important;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .animate-section-shutdown {
     animation: none !important;

@@ -6,9 +6,10 @@ import { ChatView } from './components/ChatView';
 import { ActivityView } from './components/ActivityView';
 import { SettingsView } from './components/SettingsView';
 import { AuthView } from './components/AuthView';
+import { ShareModal } from './components/ShareModal';
 import { TabType, DocumentFile, ChatMessage, ActivityItem, StagedFile, UserProfile, StagedPage, DocumentPage } from './types';
-import { checkHealth } from './services/api';
-import { X, FileText, Download, ChevronLeft, ChevronRight, Layers } from 'lucide-react';
+import { checkHealth, hasValidTokens, verifyAuthSession, apiLogout, getStoredUser, clearAuthSession } from './services/api';
+import { X, FileText, Download, ChevronLeft, ChevronRight, Layers, Share2 } from 'lucide-react';
 
 export function App() {
   // Requirement: AI Assistant chatbot is the default active view on start
@@ -21,6 +22,7 @@ export function App() {
   const targetTabRef = useRef<TabType>('chat');
 
   const [previewDoc, setPreviewDoc] = useState<DocumentFile | null>(null);
+  const [sharingDoc, setSharingDoc] = useState<DocumentFile | null>(null);
   const [activePageIdx, setActivePageIdx] = useState<number>(0);
 
   // Day / Night Theme State (defaults to clean Day Mode)
@@ -43,29 +45,98 @@ export function App() {
 
   const toggleTheme = () => setIsDark((prev) => !prev);
 
-  // User Authentication State
+  // User Authentication State (Enforces Strict Dual Token & Periodic Authorization)
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(() => {
-    const saved = localStorage.getItem('vault_user');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch {
-        return null;
-      }
+    // Security Guard: If access token or refresh token is missing, force logout state immediately
+    if (!hasValidTokens()) {
+      clearAuthSession();
+      return null;
     }
-    // Start on Auth page to let user experience login / sign up / password reset
-    return null;
+    return getStoredUser();
   });
 
   const handleLoginSuccess = (user: UserProfile) => {
     setCurrentUser(user);
-    localStorage.setItem('vault_user', JSON.stringify(user));
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     setCurrentUser(null);
-    localStorage.removeItem('vault_user');
+    await apiLogout();
   };
+
+  // 1. Strict Cold-Start Verification on App Mount
+  useEffect(() => {
+    if (!hasValidTokens()) {
+      handleLogout();
+      return;
+    }
+
+    verifyAuthSession().then((user) => {
+      if (!user) {
+        handleLogout();
+      } else {
+        setCurrentUser(user);
+      }
+    });
+  }, []);
+
+  // 2. Periodic Authorization Polling & Tab Focus Guard ("check time to time user is authorized or not")
+  useEffect(() => {
+    if (!currentUser) return;
+
+    // Check authorization every 30 seconds
+    const interval = setInterval(async () => {
+      if (!hasValidTokens()) {
+        handleLogout();
+        return;
+      }
+      const verified = await verifyAuthSession();
+      if (!verified) {
+        handleLogout();
+      }
+    }, 30000);
+
+    // Re-verify immediately whenever browser tab regains focus
+    const handleFocus = async () => {
+      if (!hasValidTokens()) {
+        handleLogout();
+        return;
+      }
+      const verified = await verifyAuthSession();
+      if (!verified) {
+        handleLogout();
+      }
+    };
+
+    // Cross-tab synchronization: if logged out or tokens purged in another tab
+    const handleStorageChange = (e: StorageEvent) => {
+      if (
+        e.key === 'vault_access_token' ||
+        e.key === 'vault_refresh_token' ||
+        e.key === 'vault_user'
+      ) {
+        if (!hasValidTokens()) {
+          handleLogout();
+        }
+      }
+    };
+
+    // Custom unauthorized event dispatched by API fetch interceptor
+    const handleUnauthorized = () => {
+      handleLogout();
+    };
+
+    window.addEventListener('focus', handleFocus);
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('vault:unauthorized', handleUnauthorized);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('vault:unauthorized', handleUnauthorized);
+    };
+  }, [currentUser]);
 
   const handleUpdateFullName = (newName: string) => {
     if (!currentUser) return;
@@ -450,8 +521,8 @@ export function App() {
       <main
         className={`flex-1 w-full max-w-5xl mx-auto transition-all ${
           displayedTab === 'chat'
-            ? 'p-0 sm:px-4 sm:py-5 md:py-6 sm:pb-8 h-[calc(100vh-5.75rem)] h-[calc(100dvh-5.75rem)] md:h-auto overflow-hidden md:overflow-visible flex flex-col'
-            : 'px-3 sm:px-4 py-4 sm:py-6 pb-12 md:pb-8 min-h-0'
+            ? 'p-0 sm:px-4 sm:py-5 md:py-6 sm:pb-8 h-[calc(100vh-3.5rem)] h-[calc(100dvh-3.5rem)] md:h-auto overflow-hidden md:overflow-visible flex flex-col'
+            : 'px-3 sm:px-4 py-4 sm:py-6 pb-36 md:pb-8 min-h-0'
         }`}
       >
         <div
@@ -474,6 +545,7 @@ export function App() {
                 setActivePageIdx(0);
               }}
               onRenameDocument={handleRenameDocument}
+              onShareDocument={(doc) => setSharingDoc(doc)}
             />
           )}
 
@@ -506,7 +578,7 @@ export function App() {
       {/* In-Browser Document Preview Modal */}
       {previewDoc && (
         <div className="fixed inset-0 z-50 bg-black/60 dark:bg-black/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-4">
-          <div className="bg-white dark:bg-[#1C1510] border border-orange-200/80 dark:border-[#382A20] rounded-2xl max-w-lg w-full p-4 space-y-3.5 shadow-2xl font-mono">
+          <div className="bg-white dark:bg-[#1C1510] border border-orange-200/80 dark:border-[#382A20] rounded-2xl max-w-lg w-full p-4 space-y-3.5 shadow-2xl font-mono max-h-[85vh] max-h-[85dvh] overflow-y-auto">
             <div className="flex items-center justify-between pb-2 border-b border-stone-100 dark:border-stone-800">
               <div className="flex items-center space-x-2 min-w-0">
                 <FileText className="w-4 h-4 text-stone-700 dark:text-stone-300 flex-shrink-0" />
@@ -631,18 +703,36 @@ export function App() {
 
             <div className="flex items-center justify-between text-xs text-stone-500 dark:text-stone-400 pt-1 border-t border-stone-100 dark:border-stone-800">
               <span className="text-[11px]">Size: {(previewDoc.size / (1024 * 1024)).toFixed(2)} MB</span>
-              <a
-                href={(previewDoc.pages && previewDoc.pages[activePageIdx]?.url) || previewDoc.previewUrl || '#'}
-                download={previewDoc.name}
-                className="flex items-center space-x-1.5 px-3.5 py-1.5 bg-orange-600 hover:bg-orange-700 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors"
-              >
-                <Download className="w-3 h-3" />
-                <span>Download</span>
-              </a>
+              <div className="flex items-center space-x-2">
+                <button
+                  type="button"
+                  onClick={() => setSharingDoc(previewDoc)}
+                  className="flex items-center space-x-1.5 px-3 py-1.5 bg-stone-100 dark:bg-stone-800 hover:bg-stone-200 dark:hover:bg-stone-700 text-stone-700 dark:text-stone-200 border border-stone-200 dark:border-stone-700 rounded-lg text-xs font-semibold shadow-xs transition-colors cursor-pointer"
+                  title="Share document directly (WhatsApp, Mail, AirDrop)"
+                >
+                  <Share2 className="w-3.5 h-3.5 text-orange-600 dark:text-orange-400" />
+                  <span>Share</span>
+                </button>
+                <a
+                  href={(previewDoc.pages && previewDoc.pages[activePageIdx]?.url) || previewDoc.previewUrl || '#'}
+                  download={previewDoc.name}
+                  className="flex items-center space-x-1.5 px-3.5 py-1.5 bg-orange-600 hover:bg-orange-700 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors"
+                >
+                  <Download className="w-3 h-3" />
+                  <span>Download</span>
+                </a>
+              </div>
             </div>
           </div>
         </div>
       )}
+
+      {/* Direct Document Sharing Modal (WhatsApp, Mail, AirDrop, etc. without downloading) */}
+      <ShareModal
+        document={sharingDoc}
+        onClose={() => setSharingDoc(null)}
+        activePageIdx={activePageIdx}
+      />
     </div>
   );
 }

@@ -257,9 +257,125 @@ def test_all_schemas_importable_from_package():
     assert hasattr(schemas, "ForgotPasswordRequest")
     assert hasattr(schemas, "ResetPasswordRequest")
     assert hasattr(schemas, "AuthResponse")
+    assert hasattr(schemas, "RefreshTokenRequest")
+    assert hasattr(schemas, "LogoutRequest")
     assert hasattr(schemas, "FileDocumentCreate")
     assert hasattr(schemas, "FileDocumentResponse")
     assert hasattr(schemas, "ChatMessageCreate")
     assert hasattr(schemas, "ConversationResponse")
     assert hasattr(schemas, "AuditLogCreate")
     assert hasattr(schemas, "AuditLogResponse")
+
+
+def test_access_and_refresh_token_durations():
+    from app.core.security import create_access_token, create_refresh_token, decode_access_token, decode_refresh_token
+
+    user_data = {"sub": "user-uuid-1234", "email": "test@vault.city", "role": "user"}
+
+    # 1. 15-Minute Access Token Verification
+    access_token = create_access_token(data=user_data)
+    access_payload = decode_access_token(access_token)
+    assert access_payload["sub"] == "user-uuid-1234"
+    assert access_payload["type"] == "access"
+    assert "jti" in access_payload
+    # Expiration is within 15 minutes (900 seconds +/- 10s)
+    exp_diff = access_payload["exp"] - access_payload["iat"]
+    assert 890 <= exp_diff <= 910
+
+    # 2. 7-Day Refresh Token Verification
+    refresh_token = create_refresh_token(data=user_data)
+    refresh_payload = decode_refresh_token(refresh_token)
+    assert refresh_payload["sub"] == "user-uuid-1234"
+    assert refresh_payload["type"] == "refresh"
+    assert "jti" in refresh_payload
+    # Expiration is within 7 days (604,800 seconds +/- 60s)
+    refresh_diff = refresh_payload["exp"] - refresh_payload["iat"]
+    assert 604700 <= refresh_diff <= 604900
+
+    # 3. Type Isolation Guard: decode_refresh_token must reject access token
+    with pytest.raises(HTTPException) as exc_info:
+        decode_refresh_token(access_token)
+    assert exc_info.value.status_code == 401
+    assert "Invalid token type" in exc_info.value.detail
+
+
+@pytest.mark.asyncio
+async def test_redis_token_hash_map_lifecycle():
+    from app.core.redis import (
+        store_token_mapping,
+        is_token_valid,
+        revoke_token,
+        revoke_all_user_tokens,
+        get_token_metadata,
+    )
+    import uuid
+    import time
+
+    jti_access = uuid.uuid4().hex
+    jti_refresh = uuid.uuid4().hex
+    user_id = str(uuid.uuid4())
+    now = int(time.time())
+
+    # Store 15-min access token in map
+    await store_token_mapping(
+        jti=jti_access,
+        user_id=user_id,
+        token_type="access",
+        exp_timestamp=now + 900,
+    )
+    assert await is_token_valid(jti_access, user_id=user_id) is True
+
+    # Store 7-day refresh token in map
+    await store_token_mapping(
+        jti=jti_refresh,
+        user_id=user_id,
+        token_type="refresh",
+        exp_timestamp=now + 604800,
+    )
+    assert await is_token_valid(jti_refresh, user_id=user_id) is True
+
+    meta = await get_token_metadata(jti_access)
+    assert meta is not None
+    assert meta["jti"] == jti_access
+    assert meta["sub"] == user_id
+    assert meta["type"] == "access"
+
+    # Revoke single access token
+    await revoke_token(jti_access, user_id=user_id)
+    assert await is_token_valid(jti_access, user_id=user_id) is False
+    assert await is_token_valid(jti_refresh, user_id=user_id) is True
+
+    # Revoke all user tokens
+    await revoke_all_user_tokens(user_id)
+    assert await is_token_valid(jti_refresh, user_id=user_id) is False
+
+
+def test_auth_response_dual_token_schema():
+    from app.schemas.auth import AuthResponse, RefreshTokenRequest, LogoutRequest
+    from app.schemas.user import UserResponse
+    from datetime import datetime
+
+    user_resp = UserResponse(
+        id="usr-123",
+        email="test@vault.city",
+        role="user",
+        is_active=True,
+        created_at=datetime.utcnow(),
+    )
+
+    auth_resp = AuthResponse(
+        access_token="sample_access_jwt",
+        refresh_token="sample_refresh_jwt",
+        token_type="bearer",
+        user=user_resp,
+    )
+    assert auth_resp.access_token == "sample_access_jwt"
+    assert auth_resp.refresh_token == "sample_refresh_jwt"
+    assert auth_resp.token_type == "bearer"
+
+    refresh_req = RefreshTokenRequest(refresh_token="sample_refresh_jwt_123456")
+    assert refresh_req.refresh_token == "sample_refresh_jwt_123456"
+
+    logout_req = LogoutRequest(refresh_token="sample_refresh_jwt_123456")
+    assert logout_req.refresh_token == "sample_refresh_jwt_123456"
+

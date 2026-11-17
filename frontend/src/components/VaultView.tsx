@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search, FileCode2, Download, Trash2, Eye, LayoutGrid, List, Edit2, Check, X } from 'lucide-react';
+import { Search, FileCode2, Download, Trash2, Eye, LayoutGrid, List, Edit2, Check, X, Share2 } from 'lucide-react';
 import { DocumentFile } from '../types';
 
 interface VaultViewProps {
@@ -7,6 +7,7 @@ interface VaultViewProps {
   onDeleteDocument: (id: string) => void;
   onPreviewDocument: (doc: DocumentFile) => void;
   onRenameDocument: (id: string, newName: string) => void;
+  onShareDocument?: (doc: DocumentFile) => void;
 }
 
 export const VaultView: React.FC<VaultViewProps> = ({
@@ -14,6 +15,7 @@ export const VaultView: React.FC<VaultViewProps> = ({
   onDeleteDocument,
   onPreviewDocument,
   onRenameDocument,
+  onShareDocument,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
@@ -49,7 +51,7 @@ export const VaultView: React.FC<VaultViewProps> = ({
   };
 
   return (
-    <div className="space-y-3.5">
+    <div className="space-y-3.5 pb-28 md:pb-0">
       {/* Top Search, Category & View Controls */}
       <div className="flex flex-col sm:flex-row gap-2.5 items-stretch sm:items-center justify-between pb-1 font-mono">
         {/* Search Input */}
@@ -119,7 +121,7 @@ export const VaultView: React.FC<VaultViewProps> = ({
               <div>
                 {/* Vault City Handle Header */}
                 <div className="flex items-center justify-between pb-2 mb-2.5 border-b border-stone-100 dark:border-stone-800/80 font-mono text-[10px]">
-                  <div className="flex items-center space-x-1.5 truncate max-w-[210px]">
+                  <div className="flex items-center space-x-1.5 min-w-0 flex-1 mr-2 truncate">
                     <span className="text-stone-400 truncate">
                       @vault.city/{doc.category?.toLowerCase() || 'docs'}
                     </span>
@@ -130,7 +132,7 @@ export const VaultView: React.FC<VaultViewProps> = ({
                     )}
                   </div>
                   {doc.isPii && (
-                    <span className="px-1.5 py-0.2 rounded bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/25 font-bold text-[9px]">
+                    <span className="px-1.5 py-0.2 rounded bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/25 font-bold text-[9px] shrink-0">
                       PII
                     </span>
                   )}
@@ -172,7 +174,7 @@ export const VaultView: React.FC<VaultViewProps> = ({
 
                 {/* Just Description as requested: "just the name , description is enaught" */}
                 {doc.description && (
-                  <p className="mt-2.5 text-xs text-stone-600 dark:text-stone-300 leading-relaxed font-sans line-clamp-3">
+                  <p className="mt-2.5 text-xs text-stone-600 dark:text-stone-300 leading-relaxed font-sans line-clamp-3 break-words">
                     {doc.description}
                   </p>
                 )}
@@ -198,6 +200,13 @@ export const VaultView: React.FC<VaultViewProps> = ({
                     <Eye className="w-3 h-3" />
                   </button>
                   <button
+                    onClick={() => onShareDocument?.(doc)}
+                    title="Share directly (WhatsApp, Mail, AirDrop)"
+                    className="p-1 rounded text-stone-400 hover:text-orange-600 dark:hover:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-500/10 transition-colors"
+                  >
+                    <Share2 className="w-3 h-3" />
+                  </button>
+                  <button
                     title="Download"
                     className="p-1 rounded text-stone-400 hover:text-stone-900 dark:hover:text-white hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors"
                   >
@@ -219,9 +228,9 @@ export const VaultView: React.FC<VaultViewProps> = ({
         /* List Mode */
         <div className="bg-white dark:bg-[#1C1510] border border-orange-200/80 dark:border-[#2D2118] rounded-xl overflow-hidden shadow-val divide-y divide-orange-100 dark:divide-[#2D2118] font-mono">
           {filteredDocs.map((doc) => (
-            <div key={doc.id} className="p-3 sm:px-4 flex items-center justify-between hover:bg-orange-50/40 dark:hover:bg-[#281D16]/40 transition-colors text-xs">
-              <div className="flex items-center space-x-3 min-w-0 flex-1">
-                <FileCode2 className="w-4 h-4 text-stone-400 flex-shrink-0" />
+            <div key={doc.id} className="p-3 sm:px-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 hover:bg-orange-50/40 dark:hover:bg-[#281D16]/40 transition-colors text-xs">
+              <div className="flex items-start sm:items-center space-x-3 min-w-0 flex-1">
+                <FileCode2 className="w-4 h-4 text-stone-400 flex-shrink-0 mt-0.5 sm:mt-0" />
                 <div className="min-w-0 flex-1">
                   {renamingId === doc.id ? (
                     <div className="flex items-center space-x-1 max-w-xs">
@@ -249,7 +258,7 @@ export const VaultView: React.FC<VaultViewProps> = ({
                       {doc.name}
                     </p>
                   )}
-                  <p className="text-[10px] text-stone-400 flex items-center gap-1.5 mt-0.5">
+                  <p className="text-[10px] text-stone-400 flex flex-wrap items-center gap-1.5 mt-0.5">
                     {doc.pageCount && doc.pageCount > 1 && (
                       <span className="px-1.5 py-0.2 rounded bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-300 border border-stone-200 dark:border-stone-700 text-[9px] font-mono">
                         {doc.pageCount} pages
@@ -268,19 +277,22 @@ export const VaultView: React.FC<VaultViewProps> = ({
                 </div>
               </div>
 
-              <div className="flex items-center space-x-1 flex-shrink-0 ml-2">
+              <div className="flex items-center justify-end space-x-1 flex-shrink-0 self-end sm:self-center pt-1.5 sm:pt-0 border-t sm:border-t-0 border-stone-100 dark:border-stone-800/40 w-full sm:w-auto">
                 {doc.isPii && (
-                  <span className="text-[9px] font-bold text-amber-700 dark:text-amber-300 bg-amber-500/10 px-1.5 py-0.5 rounded">
+                  <span className="text-[9px] font-bold text-amber-700 dark:text-amber-300 bg-amber-500/10 px-1.5 py-0.5 rounded mr-1">
                     PII
                   </span>
                 )}
-                <button onClick={() => startRename(doc)} className="p-1 text-stone-400 hover:text-stone-900 dark:hover:text-white">
+                <button onClick={() => startRename(doc)} className="p-1 text-stone-400 hover:text-stone-900 dark:hover:text-white" title="Rename">
                   <Edit2 className="w-3 h-3" />
                 </button>
-                <button onClick={() => onPreviewDocument(doc)} className="p-1 text-stone-400 hover:text-stone-900 dark:hover:text-white">
+                <button onClick={() => onPreviewDocument(doc)} className="p-1 text-stone-400 hover:text-stone-900 dark:hover:text-white" title="Preview">
                   <Eye className="w-3 h-3" />
                 </button>
-                <button onClick={() => onDeleteDocument(doc.id)} className="p-1 text-stone-400 hover:text-rose-600">
+                <button onClick={() => onShareDocument?.(doc)} className="p-1 text-stone-400 hover:text-orange-600 dark:hover:text-orange-400" title="Share directly (WhatsApp, Mail, AirDrop)">
+                  <Share2 className="w-3 h-3" />
+                </button>
+                <button onClick={() => onDeleteDocument(doc.id)} className="p-1 text-stone-400 hover:text-rose-600" title="Delete">
                   <Trash2 className="w-3 h-3" />
                 </button>
               </div>

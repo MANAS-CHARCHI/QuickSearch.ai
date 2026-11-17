@@ -58,9 +58,24 @@ class PasswordResetResponse(BaseModel):
 
 
 class AuthResponse(BaseModel):
-    """JWT authorization response returned upon successful authentication."""
+    """JWT authorization response returned upon successful authentication (15-min access + 7-day refresh)."""
     model_config = ConfigDict(from_attributes=True)
 
     access_token: str
+    refresh_token: str
     token_type: str = "bearer"
     user: UserResponse
+
+
+class RefreshTokenRequest(BaseModel):
+    """Request payload to exchange a refresh token for a fresh access token."""
+    model_config = ConfigDict(extra="ignore")
+
+    refresh_token: str = Field(..., min_length=10, description="Cryptographic refresh token")
+
+
+class LogoutRequest(BaseModel):
+    """Request payload to revoke tokens on logout."""
+    model_config = ConfigDict(extra="ignore")
+
+    refresh_token: Optional[str] = Field(None, description="Optional refresh token to explicitly revoke")
