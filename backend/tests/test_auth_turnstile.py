@@ -136,6 +136,31 @@ def test_password_reset_token_lifecycle():
     assert reset_req.token == reset_token
     assert reset_req.new_password == "BrandNewSecurePassword456!"
 
+    # Test reset token with username saved
+    username = "alex_vault"
+    reset_token_with_user = create_password_reset_token(email=email, user_id=user_id, username=username)
+    payload_user = verify_password_reset_token(reset_token_with_user)
+    assert payload_user["username"] == username
+    assert payload_user["sub"] == user_id
+    assert payload_user["email"] == email
+
+    # Verify access token generated with username saved
+    from app.core.security import decode_access_token
+    access_token_with_username = create_access_token(
+        data={"sub": user_id, "email": email, "username": username, "role": "user"}
+    )
+    access_payload = decode_access_token(access_token_with_username)
+    assert access_payload["username"] == username
+    assert access_payload["sub"] == user_id
+    assert access_payload["type"] == "access"
+
+    # Verify ForgotPasswordRequest and UserLoginRequest allow username as identifier
+    from app.schemas.auth import ForgotPasswordRequest, UserLoginRequest
+    forgot_req = ForgotPasswordRequest(email="alex_vault")
+    assert forgot_req.email == "alex_vault"
+    login_req = UserLoginRequest(email="alex_vault", password="MySecurePassword123!")
+    assert login_req.email == "alex_vault"
+
 
 def test_username_schemas_and_defaults():
     from app.schemas.user import UpdateProfileRequest, UserResponse
@@ -272,15 +297,15 @@ def test_access_and_refresh_token_durations():
 
     user_data = {"sub": "user-uuid-1234", "email": "test@vault.city", "role": "user"}
 
-    # 1. 15-Minute Access Token Verification
+    # 1. 5-Minute Access Token Verification
     access_token = create_access_token(data=user_data)
     access_payload = decode_access_token(access_token)
     assert access_payload["sub"] == "user-uuid-1234"
     assert access_payload["type"] == "access"
     assert "jti" in access_payload
-    # Expiration is within 15 minutes (900 seconds +/- 10s)
+    # Expiration is within 5 minutes (300 seconds +/- 10s)
     exp_diff = access_payload["exp"] - access_payload["iat"]
-    assert 890 <= exp_diff <= 910
+    assert 290 <= exp_diff <= 310
 
     # 2. 7-Day Refresh Token Verification
     refresh_token = create_refresh_token(data=user_data)
@@ -302,52 +327,48 @@ def test_access_and_refresh_token_durations():
 @pytest.mark.asyncio
 async def test_redis_token_hash_map_lifecycle():
     from app.core.redis import (
-        store_token_mapping,
-        is_token_valid,
-        revoke_token,
-        revoke_all_user_tokens,
-        get_token_metadata,
+        store_refresh_token,
+        check_refresh_token_in_redis,
+        revoke_refresh_token,
+        revoke_all_user_refresh_tokens,
+        get_refresh_token_metadata,
     )
     import uuid
     import time
 
-    jti_access = uuid.uuid4().hex
     jti_refresh = uuid.uuid4().hex
     user_id = str(uuid.uuid4())
     now = int(time.time())
 
-    # Store 15-min access token in map
-    await store_token_mapping(
-        jti=jti_access,
-        user_id=user_id,
-        token_type="access",
-        exp_timestamp=now + 900,
-    )
-    assert await is_token_valid(jti_access, user_id=user_id) is True
-
-    # Store 7-day refresh token in map
-    await store_token_mapping(
+    # Store 7-day refresh token in Redis map with TTL
+    await store_refresh_token(
         jti=jti_refresh,
         user_id=user_id,
-        token_type="refresh",
         exp_timestamp=now + 604800,
     )
-    assert await is_token_valid(jti_refresh, user_id=user_id) is True
+    assert await check_refresh_token_in_redis(jti_refresh, user_id=user_id) is True
 
-    meta = await get_token_metadata(jti_access)
+    meta = await get_refresh_token_metadata(jti_refresh)
     assert meta is not None
-    assert meta["jti"] == jti_access
+    assert meta["jti"] == jti_refresh
     assert meta["sub"] == user_id
-    assert meta["type"] == "access"
 
-    # Revoke single access token
-    await revoke_token(jti_access, user_id=user_id)
-    assert await is_token_valid(jti_access, user_id=user_id) is False
-    assert await is_token_valid(jti_refresh, user_id=user_id) is True
+    # Revoke single refresh token
+    await revoke_refresh_token(jti_refresh, user_id=user_id)
+    assert await check_refresh_token_in_redis(jti_refresh, user_id=user_id) is False
+
+    # Second token for user
+    jti_refresh_2 = uuid.uuid4().hex
+    await store_refresh_token(
+        jti=jti_refresh_2,
+        user_id=user_id,
+        exp_timestamp=now + 604800,
+    )
+    assert await check_refresh_token_in_redis(jti_refresh_2, user_id=user_id) is True
 
     # Revoke all user tokens
-    await revoke_all_user_tokens(user_id)
-    assert await is_token_valid(jti_refresh, user_id=user_id) is False
+    await revoke_all_user_refresh_tokens(user_id)
+    assert await check_refresh_token_in_redis(jti_refresh_2, user_id=user_id) is False
 
 
 def test_auth_response_dual_token_schema():

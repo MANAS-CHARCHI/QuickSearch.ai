@@ -9,14 +9,13 @@ from typing import Any, Dict, Optional
 import uuid
 
 import bcrypt
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, Response, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.core.config import settings
 from app.core.database import get_db
-from app.core.redis import is_token_valid
 from app.models.user import User
 
 logger = logging.getLogger("vaultcity.security")
@@ -206,13 +205,19 @@ def decode_refresh_token(token: str) -> Dict[str, Any]:
     return payload
 
 
-def create_password_reset_token(email: str, user_id: str) -> str:
+def create_password_reset_token(
+    email: str,
+    user_id: str,
+    username: Optional[str] = None,
+) -> str:
     """Create a cryptographically signed password reset token with 1-hour expiry."""
-    data = {
+    data: Dict[str, Any] = {
         "sub": user_id,
         "email": email,
         "type": "pwd_reset",
     }
+    if username:
+        data["username"] = username
     return create_access_token(data=data, expires_delta=timedelta(hours=1))
 
 
@@ -227,19 +232,93 @@ def verify_password_reset_token(token: str) -> Dict[str, Any]:
     return payload
 
 
+def set_auth_cookies(
+    response: Response,
+    access_token: str,
+    refresh_token: Optional[str] = None,
+) -> None:
+    """
+    Set HttpOnly secure cookies for access token (5-min TTL) and refresh token (7-day TTL).
+    """
+    # 5 minutes in seconds: settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60 = 300
+    access_max_age = settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
+    response.set_cookie(
+        key=settings.COOKIE_ACCESS_NAME,
+        value=access_token,
+        max_age=access_max_age,
+        expires=access_max_age,
+        httponly=True,
+        secure=settings.COOKIE_SECURE,
+        samesite=settings.COOKIE_SAMESITE,
+        domain=settings.COOKIE_DOMAIN,
+        path="/",
+    )
+
+    if refresh_token:
+        # 7 days in seconds: settings.REFRESH_TOKEN_EXPIRE_MINUTES * 60 = 604800
+        refresh_max_age = settings.REFRESH_TOKEN_EXPIRE_MINUTES * 60
+        response.set_cookie(
+            key=settings.COOKIE_REFRESH_NAME,
+            value=refresh_token,
+            max_age=refresh_max_age,
+            expires=refresh_max_age,
+            httponly=True,
+            secure=settings.COOKIE_SECURE,
+            samesite=settings.COOKIE_SAMESITE,
+            domain=settings.COOKIE_DOMAIN,
+            path="/",
+        )
+
+
+def clear_auth_cookies(response: Response) -> None:
+    """Clear HttpOnly authentication cookies."""
+    response.delete_cookie(
+        key=settings.COOKIE_ACCESS_NAME,
+        domain=settings.COOKIE_DOMAIN,
+        path="/",
+        httponly=True,
+        secure=settings.COOKIE_SECURE,
+        samesite=settings.COOKIE_SAMESITE,
+    )
+    response.delete_cookie(
+        key=settings.COOKIE_REFRESH_NAME,
+        domain=settings.COOKIE_DOMAIN,
+        path="/",
+        httponly=True,
+        secure=settings.COOKIE_SECURE,
+        samesite=settings.COOKIE_SAMESITE,
+    )
+
+
 async def get_current_user(
+    request: Request,
     auth: Optional[HTTPAuthorizationCredentials] = Depends(oauth2_scheme),
     db: AsyncSession = Depends(get_db),
 ) -> User:
-    """Dependency to retrieve the currently authenticated user from Bearer token."""
-    if not auth or not auth.credentials:
+    """
+    Dependency to retrieve the currently authenticated user.
+    Inspects HttpOnly cookie first, then falls back to Authorization: Bearer header.
+    """
+    token: Optional[str] = None
+
+    # 1. First priority: HttpOnly cookie
+    if request and settings.COOKIE_ACCESS_NAME in request.cookies:
+        cookie_val = request.cookies.get(settings.COOKIE_ACCESS_NAME)
+        if cookie_val and cookie_val.strip():
+            token = cookie_val.strip()
+
+    # 2. Second priority: Authorization: Bearer <token>
+    if not token and auth and auth.credentials:
+        token = auth.credentials.strip()
+
+    if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Authentication required.",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    payload = decode_access_token(auth.credentials)
+    payload = decode_access_token(token)
     
     # Reject refresh tokens or password reset tokens used as API bearer credentials
     token_type = payload.get("type")
@@ -257,17 +336,6 @@ async def get_current_user(
             detail="Token missing subject identifier.",
             headers={"WWW-Authenticate": "Bearer"},
         )
-
-    # Check JTI map in Redis (O(1) verification)
-    jti = payload.get("jti")
-    if jti:
-        valid = await is_token_valid(jti, user_id=user_id_str)
-        if not valid:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Authentication token has expired or been revoked.",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
 
     try:
         user_uuid = uuid.UUID(user_id_str)

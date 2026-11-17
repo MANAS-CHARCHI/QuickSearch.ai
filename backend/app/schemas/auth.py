@@ -1,7 +1,9 @@
 """
 Authentication schemas for registration, login, OAuth2, and password recovery.
 """
+from datetime import datetime
 from typing import Optional
+import uuid
 from pydantic import BaseModel, ConfigDict, Field
 from app.schemas.user import UserResponse
 
@@ -17,10 +19,10 @@ class UserRegisterRequest(BaseModel):
 
 
 class UserLoginRequest(BaseModel):
-    """Request payload to authenticate with email and password."""
+    """Request payload to authenticate with email or username and password."""
     model_config = ConfigDict(extra="ignore")
 
-    email: str = Field(..., min_length=3, max_length=255, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$", description="Valid email address")
+    email: str = Field(..., min_length=2, max_length=255, description="Valid email address or username")
     password: str = Field(..., min_length=1, max_length=128, description="Master password")
     turnstile_token: Optional[str] = Field(None, description="Cloudflare Turnstile challenge token")
 
@@ -37,7 +39,7 @@ class ForgotPasswordRequest(BaseModel):
     """Request payload for forgotten password dispatch."""
     model_config = ConfigDict(extra="ignore")
 
-    email: str = Field(..., min_length=3, max_length=255, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$", description="Valid email address")
+    email: str = Field(..., min_length=2, max_length=255, description="Valid email address or username")
     turnstile_token: Optional[str] = Field(None, description="Cloudflare Turnstile challenge token")
 
 
@@ -58,7 +60,7 @@ class PasswordResetResponse(BaseModel):
 
 
 class AuthResponse(BaseModel):
-    """JWT authorization response returned upon successful authentication (15-min access + 7-day refresh)."""
+    """JWT authorization response returned upon successful authentication (5-min access + 7-day refresh)."""
     model_config = ConfigDict(from_attributes=True)
 
     access_token: str
@@ -68,10 +70,24 @@ class AuthResponse(BaseModel):
 
 
 class RefreshTokenRequest(BaseModel):
-    """Request payload to exchange a refresh token for a fresh access token."""
+    """Request payload to exchange a refresh token for a fresh access token (optional if provided via cookie)."""
     model_config = ConfigDict(extra="ignore")
 
-    refresh_token: str = Field(..., min_length=10, description="Cryptographic refresh token")
+    refresh_token: Optional[str] = Field(None, description="Cryptographic refresh token (optional if sent via HttpOnly cookie)")
+
+
+class RefreshTokenRecord(BaseModel):
+    """Schema representing stored refresh token metadata."""
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    user_id: uuid.UUID
+    jti: str
+    expires_at: datetime
+    is_revoked: bool
+    user_agent: Optional[str] = None
+    ip_address: Optional[str] = None
+    created_at: datetime
 
 
 class LogoutRequest(BaseModel):
@@ -79,3 +95,23 @@ class LogoutRequest(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     refresh_token: Optional[str] = Field(None, description="Optional refresh token to explicitly revoke")
+
+
+class UserSessionResponse(BaseModel):
+    """Active device/session information for account security settings."""
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    device_name: str
+    device_type: str = "desktop"  # desktop, mobile, tablet
+    ip_address: Optional[str] = None
+    created_at: datetime
+    expires_at: datetime
+    is_current: bool = False
+
+
+class RevokeSessionsRequest(BaseModel):
+    """Request payload to terminate sessions."""
+    model_config = ConfigDict(extra="ignore")
+
+    keep_current: bool = Field(False, description="Whether to keep the current device session active")

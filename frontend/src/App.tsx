@@ -8,7 +8,7 @@ import { SettingsView } from './components/SettingsView';
 import { AuthView } from './components/AuthView';
 import { ShareModal } from './components/ShareModal';
 import { TabType, DocumentFile, ChatMessage, ActivityItem, StagedFile, UserProfile, StagedPage, DocumentPage } from './types';
-import { checkHealth, hasValidTokens, verifyAuthSession, apiLogout, getStoredUser, clearAuthSession } from './services/api';
+import { checkHealth, verifyAuthSession, apiLogout, getStoredUser, apiUpdateProfile } from './services/api';
 import { X, FileText, Download, ChevronLeft, ChevronRight, Layers, Share2 } from 'lucide-react';
 
 export function App() {
@@ -45,13 +45,8 @@ export function App() {
 
   const toggleTheme = () => setIsDark((prev) => !prev);
 
-  // User Authentication State (Enforces Strict Dual Token & Periodic Authorization)
+  // User Authentication State (Enforces Strict HttpOnly Cookie & Periodic Authorization)
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(() => {
-    // Security Guard: If access token or refresh token is missing, force logout state immediately
-    if (!hasValidTokens()) {
-      clearAuthSession();
-      return null;
-    }
     return getStoredUser();
   });
 
@@ -66,11 +61,6 @@ export function App() {
 
   // 1. Strict Cold-Start Verification on App Mount
   useEffect(() => {
-    if (!hasValidTokens()) {
-      handleLogout();
-      return;
-    }
-
     verifyAuthSession().then((user) => {
       if (!user) {
         handleLogout();
@@ -86,10 +76,6 @@ export function App() {
 
     // Check authorization every 30 seconds
     const interval = setInterval(async () => {
-      if (!hasValidTokens()) {
-        handleLogout();
-        return;
-      }
       const verified = await verifyAuthSession();
       if (!verified) {
         handleLogout();
@@ -98,26 +84,16 @@ export function App() {
 
     // Re-verify immediately whenever browser tab regains focus
     const handleFocus = async () => {
-      if (!hasValidTokens()) {
-        handleLogout();
-        return;
-      }
       const verified = await verifyAuthSession();
       if (!verified) {
         handleLogout();
       }
     };
 
-    // Cross-tab synchronization: if logged out or tokens purged in another tab
+    // Cross-tab synchronization: if logged out or user purged in another tab
     const handleStorageChange = (e: StorageEvent) => {
-      if (
-        e.key === 'vault_access_token' ||
-        e.key === 'vault_refresh_token' ||
-        e.key === 'vault_user'
-      ) {
-        if (!hasValidTokens()) {
-          handleLogout();
-        }
+      if (e.key === 'vault_user' && !e.newValue) {
+        handleLogout();
       }
     };
 
@@ -138,15 +114,21 @@ export function App() {
     };
   }, [currentUser]);
 
-  const handleUpdateFullName = (newName: string) => {
+  const handleUpdateFullName = async (newName: string) => {
     if (!currentUser) return;
-    const updatedUser: UserProfile = {
-      ...currentUser,
-      name: newName,
-      fullName: newName,
-    };
-    setCurrentUser(updatedUser);
-    localStorage.setItem('vault_user', JSON.stringify(updatedUser));
+    try {
+      const updatedUser = await apiUpdateProfile(newName);
+      setCurrentUser(updatedUser);
+    } catch (err) {
+      console.warn('Backend profile update failed, falling back to local cache:', err);
+      const updatedUser: UserProfile = {
+        ...currentUser,
+        name: newName,
+        fullName: newName,
+      };
+      setCurrentUser(updatedUser);
+      localStorage.setItem('vault_user', JSON.stringify(updatedUser));
+    }
 
     setActivities((prev) => [
       {

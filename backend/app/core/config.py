@@ -18,11 +18,18 @@ class Settings(BaseSettings):
     # Redis Cache & Token Map
     REDIS_URL: str = "redis://redis:6379/0"
 
-    # Security & JWT (15-min Access, 7-day Refresh)
+    # Security & JWT (5-min Access, 7-day Refresh)
     SECRET_KEY: str = "default_insecure_secret_key_change_in_production"
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 15  # 15 minutes
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 5  # 5 minutes
     REFRESH_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7 days (10080 minutes)
+
+    # HttpOnly Cookie Settings
+    COOKIE_ACCESS_NAME: str = "vault_access_token"
+    COOKIE_REFRESH_NAME: str = "vault_refresh_token"
+    COOKIE_SECURE: bool = False  # Set to True in production (HTTPS)
+    COOKIE_SAMESITE: str = "lax"  # 'lax', 'strict', or 'none'
+    COOKIE_DOMAIN: Optional[str] = None
 
     # Google Social Auth
     GOOGLE_CLIENT_ID: Optional[str] = "105470440264-7ep9hin2tddk14jba8agmbddbcl6j12r.apps.googleusercontent.com"

@@ -1,6 +1,6 @@
 export type TabType = 'chat' | 'vault' | 'upload' | 'activity' | 'settings';
 
-export type AuthMode = 'login' | 'signup' | 'forgot_password';
+export type AuthMode = 'login' | 'signup' | 'forgot_password' | 'reset_password';
 
 export interface UserProfile {
   id: string;
@@ -101,4 +101,14 @@ export interface ActivityItem {
   timestamp: string;
   status: 'success' | 'warning' | 'info';
   codeHash?: string;
+}
+
+export interface UserSession {
+  id: string;
+  deviceName: string;
+  deviceType: 'desktop' | 'mobile' | 'tablet';
+  ipAddress?: string;
+  createdAt: string;
+  expiresAt: string;
+  isCurrent: boolean;
 }

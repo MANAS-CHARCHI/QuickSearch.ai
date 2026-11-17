@@ -1,9 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { Eye, EyeOff, ArrowRight, ShieldCheck, Mail, Lock, ArrowLeft, Sun, Moon, Check } from 'lucide-react';
+import { Eye, EyeOff, ArrowRight, ShieldCheck, Mail, Lock, ArrowLeft, Sun, Moon, Check, KeyRound } from 'lucide-react';
 import { AuthMode, UserProfile } from '../types';
 import { AuthIllustration } from './AuthIllustration';
 import { TurnstileWidget } from './TurnstileWidget';
-import { apiLogin, apiRegister, apiGoogleAuth } from '../services/api';
+import {
+  apiLogin,
+  apiRegister,
+  apiGoogleAuth,
+  apiForgotPassword,
+  apiResetPassword,
+} from '../services/api';
 
 declare global {
   interface Window {
@@ -49,6 +55,7 @@ export const AuthView: React.FC<AuthViewProps> = ({
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [resetToken, setResetToken] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -59,9 +66,25 @@ export const AuthView: React.FC<AuthViewProps> = ({
     (import.meta as any).env?.VITE_GOOGLE_CLIENT_ID ||
     '105470440264-7ep9hin2tddk14jba8agmbddbcl6j12r.apps.googleusercontent.com';
 
+  // Check URL parameters for reset_token or token on mount
+  useEffect(() => {
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      const tokenFromUrl = urlParams.get('reset_token') || urlParams.get('token');
+      if (tokenFromUrl) {
+        setResetToken(tokenFromUrl);
+        setMode('reset_password');
+        setSuccessMessage('Password reset token detected. Enter your new master password below.');
+      }
+    } catch (e) {
+      // Ignore URL parsing errors
+    }
+  }, []);
+
+  // Handle Google OAuth2 Credential Response (Standard Web Client)
   const handleGoogleCredentialResponse = async (response: { credential: string }) => {
-    if (!response?.credential) {
-      setErrorMessage('Google Sign-In did not return a valid credential.');
+    if (!response.credential) {
+      setErrorMessage('Google credential exchange returned empty token.');
       return;
     }
     setIsLoading(true);
@@ -137,24 +160,18 @@ export const AuthView: React.FC<AuthViewProps> = ({
         });
         tokenClient.requestAccessToken({ prompt: '' });
         return;
-      } catch (err: any) {
-        console.warn('Google OAuth2 popup invocation notice:', err);
+      } catch (err) {
+        console.warn('InitTokenClient fallback, trying id prompt:', err);
       }
     }
 
-    // 2. Direct fallback to Google One Tap
-    if (window.google.accounts.id) {
-      try {
-        window.google.accounts.id.initialize({
-          client_id: googleClientId,
-          callback: handleGoogleCredentialResponse,
-          auto_select: false,
-          cancel_on_tap_outside: true,
-        });
-        window.google.accounts.id.prompt();
-      } catch (err: any) {
-        setErrorMessage('Failed to launch Google Sign-In.');
-      }
+    // 2. Fallback to Google ID prompt if oauth2 client popup blocked
+    if (window.google?.accounts?.id?.prompt) {
+      window.google.accounts.id.prompt((notification: any) => {
+        if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
+          setErrorMessage('Unable to open Google Sign-In prompt. Please check your browser popup settings.');
+        }
+      });
     }
   };
 
@@ -171,29 +188,82 @@ export const AuthView: React.FC<AuthViewProps> = ({
     setErrorMessage(null);
     setSuccessMessage(null);
 
-    if (!email.trim() || !email.includes('@')) {
-      setErrorMessage('Please enter a valid email address.');
+    const effectiveToken = turnstileToken || '1x00000000000000000000AA';
+
+    // 1. Password Reset Completion (New Password + Token)
+    if (mode === 'reset_password') {
+      if (!resetToken.trim()) {
+        setErrorMessage('Please provide a valid password reset token.');
+        return;
+      }
+      if (!password || password.length < 8) {
+        setErrorMessage('New password must be at least 8 characters long.');
+        return;
+      }
+      if (password !== confirmPassword) {
+        setErrorMessage('Passwords do not match.');
+        return;
+      }
+
+      setIsLoading(true);
+      try {
+        const result = await apiResetPassword({
+          token: resetToken.trim(),
+          new_password: password,
+          turnstile_token: effectiveToken,
+        });
+
+        if (result.user) {
+          onLoginSuccess(result.user);
+          return;
+        }
+
+        setSuccessMessage(result.message || 'Password successfully updated. Please sign in with your new password.');
+        setPassword('');
+        setConfirmPassword('');
+        setResetToken('');
+        switchMode('login');
+      } catch (err: any) {
+        setErrorMessage(err.message || 'Password reset failed. The token may be expired or invalid.');
+      } finally {
+        setIsLoading(false);
+      }
       return;
     }
 
+    // 2. Forgot Password Request (Dispatches token / instructions)
     if (mode === 'forgot_password') {
+      if (!email.trim()) {
+        setErrorMessage('Please enter your registered email address or username.');
+        return;
+      }
+
       setIsLoading(true);
       try {
-        const res = await fetch('/api/v1/auth/forgot-password', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            email: email.trim(),
-            turnstile_token: turnstileToken || '1x00000000000000000000AA',
-          }),
+        const data = await apiForgotPassword({
+          email: email.trim(),
+          turnstile_token: effectiveToken,
         });
-        const data = await res.json();
-        setSuccessMessage(data.message || `Password reset link sent to ${email}. Check your inbox.`);
+
+        if (data.reset_token) {
+          // Dev / Direct recovery: pre-fill token and advance to reset_password mode
+          setResetToken(data.reset_token);
+          setMode('reset_password');
+          setSuccessMessage('Recovery token generated! Please set your new master password below.');
+        } else {
+          setSuccessMessage(data.message || `Password recovery instructions dispatched. Please check your inbox.`);
+        }
       } catch (err: any) {
         setErrorMessage(err.message || 'Failed to dispatch password recovery instructions.');
       } finally {
         setIsLoading(false);
       }
+      return;
+    }
+
+    // 3. Regular Login or Registration
+    if (!email.trim()) {
+      setErrorMessage('Please enter your email address or username.');
       return;
     }
 
@@ -209,7 +279,6 @@ export const AuthView: React.FC<AuthViewProps> = ({
 
     setIsLoading(true);
     try {
-      const effectiveToken = turnstileToken || '1x00000000000000000000AA';
       if (mode === 'login') {
         const result = await apiLogin({
           email: email.trim(),
@@ -221,7 +290,7 @@ export const AuthView: React.FC<AuthViewProps> = ({
         const result = await apiRegister({
           email: email.trim(),
           password,
-          username: email.split('@')[0],
+          username: email.includes('@') ? email.split('@')[0] : email,
           turnstile_token: effectiveToken,
         });
         onLoginSuccess(result.user);
@@ -235,10 +304,10 @@ export const AuthView: React.FC<AuthViewProps> = ({
 
   return (
     <div className="min-h-screen bg-[#FFFCF9] dark:bg-[#140E0A] bg-grid-pattern text-stone-900 dark:text-[#FAF5F0] flex flex-col font-sans transition-colors duration-200">
-      {/* Top Vault City Navbar (Identical to Main App) */}
+      {/* Top Vault City Navbar */}
       <header className="sticky top-0 z-40 bg-[#FFFCF9]/85 dark:bg-[#140E0A]/85 backdrop-blur-md border-b border-orange-200/50 dark:border-[#2D2118] transition-colors">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
-          {/* Brand (Identical to Main App) */}
+          {/* Brand */}
           <div className="flex items-center space-x-2.5">
             <img src="/favicon.svg" alt="Vault City" className="w-5 h-5 rounded-md shrink-0" />
             <span className="font-extrabold text-base tracking-tight text-stone-950 dark:text-white font-sans">
@@ -248,33 +317,12 @@ export const AuthView: React.FC<AuthViewProps> = ({
             <span className="text-[11px] text-stone-500 dark:text-stone-400 font-mono">auth</span>
           </div>
 
-          {/* Right Status & Controls (Identical to Main App) */}
-          <div className="flex items-center space-x-2.5">
-            <div className="hidden sm:flex items-center space-x-1.5 px-2.5 py-1 rounded-md text-xs font-sans text-stone-500 dark:text-stone-400 bg-orange-50/60 dark:bg-[#1C1510] border border-orange-200/60 dark:border-[#2D2118]">
-              <ShieldCheck className="w-3.5 h-3.5 text-stone-500 dark:text-stone-400" />
-              <span>Encrypted</span>
+          <div className="flex items-center space-x-2">
+            <div className="hidden sm:flex items-center space-x-1.5 px-2.5 py-1 rounded-md text-xs font-mono text-stone-500 dark:text-stone-400 bg-orange-50/60 dark:bg-[#1C1510] border border-orange-200/60 dark:border-[#2D2118]">
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+              <span>AES-256 Cloud</span>
             </div>
 
-            {/* Quick Switch Mode Button */}
-            {mode === 'login' ? (
-              <button
-                type="button"
-                onClick={() => switchMode('signup')}
-                className="px-2.5 py-1 rounded-md text-xs font-mono font-semibold text-stone-700 dark:text-stone-300 hover:text-stone-950 dark:hover:text-white bg-stone-100 dark:bg-stone-900 border border-stone-200 dark:border-stone-800 transition-colors cursor-pointer"
-              >
-                Sign up
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={() => switchMode('login')}
-                className="px-2.5 py-1 rounded-md text-xs font-mono font-semibold text-stone-700 dark:text-stone-300 hover:text-stone-950 dark:hover:text-white bg-stone-100 dark:bg-stone-900 border border-stone-200 dark:border-stone-800 transition-colors cursor-pointer"
-              >
-                Log in
-              </button>
-            )}
-
-            {/* Day / Night Theme Switcher */}
             <button
               onClick={onToggleTheme}
               title={isDark ? 'Switch to Day (Light)' : 'Switch to Night (Dark)'}
@@ -293,7 +341,7 @@ export const AuthView: React.FC<AuthViewProps> = ({
           <div className="lg:col-span-6 bg-white dark:bg-[#1C1510] border border-orange-200/80 dark:border-[#2D2118] rounded-2xl p-6 sm:p-7 shadow-val transition-all">
             {/* Title & Subtitle */}
             <div className="mb-6 space-y-1">
-              {mode === 'forgot_password' && (
+              {(mode === 'forgot_password' || mode === 'reset_password') && (
                 <button
                   type="button"
                   onClick={() => switchMode('login')}
@@ -307,11 +355,13 @@ export const AuthView: React.FC<AuthViewProps> = ({
                 {mode === 'login' && 'Sign in to Vault City'}
                 {mode === 'signup' && 'Create your account'}
                 {mode === 'forgot_password' && 'Reset master password'}
+                {mode === 'reset_password' && 'Set new master password'}
               </h2>
               <p className="text-xs text-stone-500 dark:text-stone-400 font-sans">
                 {mode === 'login' && 'Access your encrypted personal documents and records.'}
                 {mode === 'signup' && 'Private, zero-knowledge storage for your identity & health files.'}
-                {mode === 'forgot_password' && 'Enter your email to receive recovery instructions.'}
+                {mode === 'forgot_password' && 'Enter your email or username to receive recovery instructions.'}
+                {mode === 'reset_password' && 'Enter your recovery token and choose a new master password.'}
               </p>
             </div>
 
@@ -328,8 +378,8 @@ export const AuthView: React.FC<AuthViewProps> = ({
               </div>
             )}
 
-            {/* Google Social Auth - Exactly 1 button with crisp border, reactive hover state, and zero ring light */}
-            {mode !== 'forgot_password' && (
+            {/* Google Social Auth */}
+            {mode !== 'forgot_password' && mode !== 'reset_password' && (
               <div className="space-y-3 mb-5">
                 <button
                   type="button"
@@ -337,7 +387,6 @@ export const AuthView: React.FC<AuthViewProps> = ({
                   disabled={isLoading}
                   className="google-single-btn w-full flex items-center justify-center space-x-2.5 py-2.5 px-4 bg-white dark:bg-[#181820] hover:bg-stone-50 dark:hover:bg-stone-900 border border-stone-300 hover:border-stone-500 dark:border-stone-700 dark:hover:border-stone-500 rounded-xl text-xs font-semibold text-stone-800 dark:text-stone-100 transition-colors shadow-none select-none cursor-pointer outline-none ring-0 focus:outline-none focus:ring-0 active:outline-none active:ring-0"
                 >
-                  {/* Google Multicolor Logo */}
                   <svg className="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24">
                     <path
                       fill="#4285F4"
@@ -362,7 +411,7 @@ export const AuthView: React.FC<AuthViewProps> = ({
                 <div className="relative flex items-center justify-center pt-1">
                   <div className="border-t border-stone-200 dark:border-stone-800 w-full" />
                   <span className="bg-white dark:bg-[#1C1510] px-2.5 text-[10px] text-stone-400 font-mono uppercase tracking-wider relative">
-                    or continue with email
+                    or continue with credentials
                   </span>
                 </div>
               </div>
@@ -370,29 +419,66 @@ export const AuthView: React.FC<AuthViewProps> = ({
 
             {/* Email / Password Form */}
             <form onSubmit={handleSubmit} className="space-y-3.5 font-mono">
-              <div>
-                <label className="block text-[11px] font-medium text-stone-700 dark:text-stone-300 mb-1">
-                  Email Address
-                </label>
-                <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-stone-400" />
-                  <input
-                    type="email"
-                    required
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="you@domain.com"
-                    autoComplete="email"
-                    className="w-full bg-stone-50 dark:bg-[#181820] border border-stone-200 dark:border-stone-700 rounded-lg pl-8 pr-3 py-2 text-xs text-stone-900 dark:text-white placeholder-stone-400 focus:outline-none focus:border-stone-400 dark:focus:border-stone-600 transition-colors font-mono"
-                  />
+              {/* Reset Password: Token Field */}
+              {mode === 'reset_password' && (
+                <div>
+                  <label className="block text-[11px] font-medium text-stone-700 dark:text-stone-300 mb-1">
+                    Recovery Token
+                  </label>
+                  <div className="relative">
+                    <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-stone-400" />
+                    <input
+                      type="text"
+                      required
+                      value={resetToken}
+                      onChange={(e) => setResetToken(e.target.value)}
+                      placeholder="Paste your reset token..."
+                      className="w-full bg-stone-50 dark:bg-[#181820] border border-stone-200 dark:border-stone-700 rounded-lg pl-8 pr-3 py-2 text-xs text-stone-900 dark:text-white placeholder-stone-400 focus:outline-none focus:border-stone-400 dark:focus:border-stone-600 transition-colors font-mono"
+                    />
+                  </div>
                 </div>
-              </div>
+              )}
 
+              {/* Login, Signup, or Forgot Password: Email / Username Field */}
+              {mode !== 'reset_password' && (
+                <div>
+                  <label className="block text-[11px] font-medium text-stone-700 dark:text-stone-300 mb-1">
+                    {mode === 'forgot_password' ? 'Email Address or Username' : 'Email Address / Username'}
+                  </label>
+                  <div className="relative">
+                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-stone-400" />
+                    <input
+                      type="text"
+                      required
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="user@domain.com or username"
+                      autoComplete="username"
+                      className="w-full bg-stone-50 dark:bg-[#181820] border border-stone-200 dark:border-stone-700 rounded-lg pl-8 pr-3 py-2 text-xs text-stone-900 dark:text-white placeholder-stone-400 focus:outline-none focus:border-stone-400 dark:focus:border-stone-600 transition-colors font-mono"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Forgot Password direct switch link */}
+              {mode === 'forgot_password' && (
+                <div className="text-right">
+                  <button
+                    type="button"
+                    onClick={() => switchMode('reset_password')}
+                    className="text-[10px] text-stone-500 hover:text-stone-900 dark:hover:text-white transition-colors cursor-pointer font-mono"
+                  >
+                    Already have a token? Set password &rarr;
+                  </button>
+                </div>
+              )}
+
+              {/* Password Field (for Login, Signup, or Reset Password) */}
               {mode !== 'forgot_password' && (
                 <div>
                   <div className="flex items-center justify-between mb-1">
                     <label className="text-[11px] font-medium text-stone-700 dark:text-stone-300">
-                      Master Password
+                      {mode === 'reset_password' ? 'New Master Password' : 'Master Password'}
                     </label>
                     {mode === 'login' && (
                       <button
@@ -426,10 +512,11 @@ export const AuthView: React.FC<AuthViewProps> = ({
                 </div>
               )}
 
-              {mode === 'signup' && (
+              {/* Confirm Password Field (for Signup or Reset Password) */}
+              {(mode === 'signup' || mode === 'reset_password') && (
                 <div>
                   <label className="block text-[11px] font-medium text-stone-700 dark:text-stone-300 mb-1">
-                    Confirm Password
+                    Confirm {mode === 'reset_password' ? 'New Password' : 'Password'}
                   </label>
                   <div className="relative">
                     <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-stone-400" />
@@ -466,7 +553,9 @@ export const AuthView: React.FC<AuthViewProps> = ({
                     ? 'Sign In to Vault'
                     : mode === 'signup'
                     ? 'Create Master Account'
-                    : 'Send Reset Link'}
+                    : mode === 'forgot_password'
+                    ? 'Send Recovery Token'
+                    : 'Update Master Password'}
                 </span>
                 {!isLoading && <ArrowRight className="w-3.5 h-3.5" />}
               </button>
@@ -498,7 +587,7 @@ export const AuthView: React.FC<AuthViewProps> = ({
                   </button>
                 </p>
               )}
-              {mode === 'forgot_password' && (
+              {(mode === 'forgot_password' || mode === 'reset_password') && (
                 <p>
                   Remembered your password?{' '}
                   <button
