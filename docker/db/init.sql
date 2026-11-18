@@ -1,5 +1,6 @@
 -- Vault City Database Initialization Script
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NOT EXISTS vector;
 
 CREATE TABLE IF NOT EXISTS users (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -100,4 +101,22 @@ CREATE INDEX IF NOT EXISTS ix_refresh_tokens_token ON refresh_tokens(token);
 CREATE INDEX IF NOT EXISTS ix_refresh_tokens_jti ON refresh_tokens(jti);
 CREATE INDEX IF NOT EXISTS ix_refresh_tokens_expires_at ON refresh_tokens(expires_at);
 CREATE INDEX IF NOT EXISTS ix_refresh_tokens_is_revoked ON refresh_tokens(is_revoked);
+
+CREATE TABLE IF NOT EXISTS document_chunks (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    file_id UUID NOT NULL REFERENCES files(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    chunk_index INTEGER NOT NULL,
+    page_number INTEGER NOT NULL DEFAULT 1,
+    content TEXT NOT NULL,
+    embedding vector(384) NOT NULL,
+    metadata_json JSONB,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_document_chunks_file_chunk ON document_chunks(file_id, chunk_index);
+CREATE INDEX IF NOT EXISTS ix_document_chunks_user_id ON document_chunks(user_id);
+CREATE INDEX IF NOT EXISTS ix_document_chunks_file_id ON document_chunks(file_id);
+CREATE INDEX IF NOT EXISTS ix_document_chunks_embedding_hnsw
+    ON document_chunks USING hnsw (embedding vector_cosine_ops);
 

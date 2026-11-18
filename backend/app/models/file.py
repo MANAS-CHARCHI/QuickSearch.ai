@@ -36,5 +36,6 @@ class FileDocument(Base):
         DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
     )
 
-    # Relationship
+    # Relationships
     user = relationship("User", back_populates="files")
+    chunks = relationship("DocumentChunk", back_populates="file", cascade="all, delete-orphan")

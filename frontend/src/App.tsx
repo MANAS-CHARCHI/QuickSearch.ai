@@ -144,7 +144,7 @@ export function App() {
 
   const [systemStatus, setSystemStatus] = useState({
     postgres: 'connected',
-    chromadb: 'connected',
+    pgvector: 'connected',
   });
 
   const [documents, setDocuments] = useState<DocumentFile[]>([
@@ -256,7 +256,7 @@ export function App() {
       if (data && data.checks) {
         setSystemStatus({
           postgres: data.checks.postgres || 'connected',
-          chromadb: data.checks.chromadb || 'connected',
+          pgvector: data.checks.pgvector || 'connected',
         });
       }
     }

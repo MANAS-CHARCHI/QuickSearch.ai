@@ -7,13 +7,9 @@ class Settings(BaseSettings):
     VERSION: str = "0.1.0"
     API_V1_STR: str = "/api/v1"
     
-    # Database
+    # Database (PostgreSQL + pgvector)
     DATABASE_URL: str = "postgresql+asyncpg://vault_user:vault_secure_password@db:5432/vault_db"
-    
-    # ChromaDB
-    CHROMA_HOST: str = "localhost"
-    CHROMA_PORT: int = 8000
-    CHROMA_PERSIST_DIRECTORY: str = "./chroma_db"
+    VECTOR_DIMENSION: int = 384
     
     # Redis Cache & Token Map
     REDIS_URL: str = "redis://redis:6379/0"

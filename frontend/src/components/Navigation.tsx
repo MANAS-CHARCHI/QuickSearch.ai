@@ -7,7 +7,7 @@ interface NavigationProps {
   onSelectTab: (tab: TabType) => void;
   systemStatus: {
     postgres: string;
-    chromadb: string;
+    pgvector: string;
   };
   isDark: boolean;
   onToggleTheme: () => void;

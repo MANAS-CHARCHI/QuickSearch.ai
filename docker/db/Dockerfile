@@ -1,4 +1,4 @@
-FROM postgres:16-alpine
+FROM pgvector/pgvector:pg16
 
 ENV POSTGRES_DB=vault_db \
     POSTGRES_USER=vault_user \

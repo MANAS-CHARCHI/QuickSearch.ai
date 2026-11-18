@@ -22,7 +22,6 @@ RUN uv pip install --system --no-cache -r requirements.txt
 COPY . .
 
 RUN useradd -m -u 1000 appuser && \
-    mkdir -p /app/chroma_db && \
     chmod +x /app/entrypoint.sh && \
     chown -R appuser:appuser /app
 

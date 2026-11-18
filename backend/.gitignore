@@ -43,8 +43,6 @@ venv.bak/
 # Database & local storage
 *.sqlite3
 *.db
-chroma_db/
-chroma_data/
 storage/
 uploads/
 *.log

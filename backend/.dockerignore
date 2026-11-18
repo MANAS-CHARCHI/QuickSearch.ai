@@ -11,4 +11,3 @@ htmlcov
 .gitignore
 *.swp
 .DS_Store
-chroma_db/

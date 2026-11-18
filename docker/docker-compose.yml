@@ -61,8 +61,7 @@ services:
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-105470440264-7ep9hin2tddk14jba8agmbddbcl6j12r.apps.googleusercontent.com}
       SECRET_KEY: ${SECRET_KEY:-change-this-to-a-super-secure-random-secret-key-in-prod}
-      CHROMA_HOST: localhost
-      CHROMA_PORT: 8000
+      VECTOR_DIMENSION: ${VECTOR_DIMENSION:-384}
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     volumes:

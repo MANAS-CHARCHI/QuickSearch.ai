@@ -3,7 +3,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.services.chroma_service import chroma_service
+from app.services.vector_service import vector_service
 
 router = APIRouter(prefix="/health", tags=["Health"])
 
@@ -16,7 +16,7 @@ async def liveness():
 
 @router.get("/ready")
 async def readiness(db: AsyncSession = Depends(get_db)):
-    """Readiness probe checking database & ChromaDB connectivity."""
+    """Readiness probe checking PostgreSQL & pgvector extension availability."""
     checks = {}
 
     # Check PostgreSQL
@@ -26,12 +26,12 @@ async def readiness(db: AsyncSession = Depends(get_db)):
     except Exception as e:
         checks["postgres"] = f"unhealthy: {str(e)}"
 
-    # Check ChromaDB
+    # Check pgvector extension
     try:
-        is_chroma_up = chroma_service.ping()
-        checks["chromadb"] = "connected" if is_chroma_up else "unhealthy"
+        is_pgvector_ready = await vector_service.ping(db)
+        checks["pgvector"] = "connected" if is_pgvector_ready else "unhealthy"
     except Exception as e:
-        checks["chromadb"] = f"unhealthy: {str(e)}"
+        checks["pgvector"] = f"unhealthy: {str(e)}"
 
     is_ready = all(v == "connected" for v in checks.values())
     return {
