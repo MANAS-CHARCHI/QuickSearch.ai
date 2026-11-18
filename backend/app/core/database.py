@@ -35,7 +35,7 @@ _tables_initialized = False
 async def init_db() -> None:
     """Ensure all SQLAlchemy tables are created in PostgreSQL."""
     global _tables_initialized
-    import app.models  # noqa: F401
+    import app.models
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     _tables_initialized = True

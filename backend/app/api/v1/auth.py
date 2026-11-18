@@ -11,9 +11,16 @@ from app.core.database import get_db
 from app.core.limiter import rate_limit
 from app.core.redis import (
     check_refresh_token_in_redis,
+    clear_email_otp_resend_count,
+    generate_numeric_otp,
+    get_email_otp_resend_cooldown,
+    get_email_otp_resend_count,
+    increment_email_otp_resend_count,
     revoke_all_user_refresh_tokens,
     revoke_refresh_token,
+    store_email_otp,
     store_refresh_token,
+    verify_email_otp,
 )
 from app.core.security import (
     clear_auth_cookies,
@@ -38,11 +45,15 @@ from app.schemas.auth import (
     GoogleAuthRequest,
     LogoutRequest,
     RefreshTokenRequest,
+    RegisterResponse,
+    ResendOTPRequest,
+    ResendOTPResponse,
     ResetPasswordRequest,
     RevokeSessionsRequest,
     UserLoginRequest,
     UserRegisterRequest,
     UserSessionResponse,
+    VerifyEmailOTPRequest,
 )
 from app.schemas.turnstile import (
     TurnstileVerifyRequest,
@@ -53,6 +64,11 @@ from app.schemas.user import (
     UpdateProfileRequest,
     UserResponse,
     make_user_response,
+)
+from app.services.email_service import (
+    is_smtp_configured,
+    send_password_reset_email,
+    send_verification_otp_email,
 )
 
 router = APIRouter(prefix="/auth", tags=["Authentication & Security"])
@@ -154,9 +170,9 @@ async def verify_turnstile(
 
 @router.post(
     "/register",
-    response_model=AuthResponse,
+    response_model=RegisterResponse,
     status_code=status.HTTP_201_CREATED,
-    summary="Register a new user with Turnstile human verification",
+    summary="Register a new user and dispatch 6-digit email verification OTP",
     dependencies=[Depends(rate_limit(max_requests=5, window_seconds=60, key_prefix="auth_register"))],
 )
 async def register(
@@ -168,10 +184,10 @@ async def register(
     """
     Register a new user:
     1. Validates human Turnstile token
-    2. Validates email uniqueness
-    3. Hashes password securely via bcrypt
-    4. Persists user in database
-    5. Returns JWT access token, sets HttpOnly cookies, and returns user profile
+    2. Validates email uniqueness (supports linking password for Google OAuth accounts or re-sending OTP for unverified accounts)
+    3. Hashes password securely via bcrypt and creates inactive/unverified account
+    4. Generates a 6-digit OTP stored hashed in Redis (10-min TTL) and emails it via SMTP
+    5. Account remains inactive until verified via POST /api/v1/auth/verify-email
     """
     client_ip = get_client_ip(request)
 
@@ -185,15 +201,24 @@ async def register(
     if token:
         await verify_turnstile_token(token=token, remote_ip=client_ip, expected_action=["auth", "signup", "register"])
 
+    normalized_email = payload.email.lower().strip()
+    default_username = (
+        payload.username.strip()
+        if payload.username and payload.username.strip()
+        else normalized_email.split("@")[0]
+    )
+
     # Check if user already exists
-    existing_query = select(User).where(User.email == payload.email.lower().strip())
+    existing_query = select(User).where(User.email == normalized_email)
     existing_result = await db.execute(existing_query)
     existing_user = existing_result.scalar_one_or_none()
     if existing_user:
-        # If user registered via Google OAuth and has no password yet, link this password!
-        if existing_user.hashed_password is None:
+        # Case A: User registered via Google OAuth (already verified by Google) and has no password yet
+        if existing_user.hashed_password is None and existing_user.google_id:
             hashed = get_password_hash(payload.password)
             existing_user.hashed_password = hashed
+            existing_user.is_email_verified = True
+            existing_user.is_active = True
             if payload.username and payload.username.strip():
                 existing_user.username = payload.username.strip()
             existing_user.updated_at = datetime.utcnow()
@@ -203,32 +228,71 @@ async def register(
             access_token, refresh_token = await issue_token_pair(existing_user, db, request)
             set_auth_cookies(response, access_token, refresh_token)
 
-            return AuthResponse(
+            return RegisterResponse(
+                status="authenticated",
+                verification_required=False,
+                email=existing_user.email,
+                message="Password linked to your Google account. Signed in successfully.",
                 access_token=access_token,
                 refresh_token=refresh_token,
                 token_type="bearer",
                 user=make_user_response(existing_user),
             )
-        else:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="An account with this email address already exists. Please sign in with your password or use Google Sign-In.",
+
+        # Case B: User started onboarding earlier but never verified their email -> refresh credentials & resend OTP
+        if not existing_user.is_email_verified and not existing_user.is_active:
+            existing_user.hashed_password = get_password_hash(payload.password)
+            existing_user.username = default_username
+            existing_user.updated_at = datetime.utcnow()
+            await db.commit()
+            await db.refresh(existing_user)
+
+            otp_code = generate_numeric_otp(6)
+            ttl_seconds = settings.OTP_EXPIRE_MINUTES * 60
+            await store_email_otp(existing_user.email, otp_code, ttl_seconds=ttl_seconds)
+
+            try:
+                delivery = await send_verification_otp_email(
+                    to_email=existing_user.email,
+                    username=existing_user.username or default_username,
+                    otp_code=otp_code,
+                    expire_minutes=settings.OTP_EXPIRE_MINUTES,
+                )
+            except RuntimeError as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    detail=str(exc),
+                )
+
+            used = await get_email_otp_resend_count(existing_user.email)
+            return RegisterResponse(
+                status="verification_required",
+                verification_required=True,
+                email=existing_user.email,
+                message=f"A fresh 6-digit verification code has been sent to {existing_user.email}.",
+                expires_in_seconds=ttl_seconds,
+                cooldown_seconds=settings.OTP_RESEND_COOLDOWN_SECONDS,
+                max_resends=settings.OTP_MAX_RESENDS,
+                remaining_resends=max(0, settings.OTP_MAX_RESENDS - used),
+                dev_otp=otp_code if delivery.get("mode") == "console_fallback" else None,
             )
 
-    # Create user
+        # Case C: Already verified & active account
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="An account with this email address already exists. Please sign in with your password or use Google Sign-In.",
+        )
+
+    # Create new unverified & inactive user until 6-digit email OTP is confirmed
     hashed = get_password_hash(payload.password)
-    default_username = (
-        payload.username.strip()
-        if payload.username and payload.username.strip()
-        else payload.email.split("@")[0]
-    )
     new_user = User(
         id=uuid.uuid4(),
-        email=payload.email.lower().strip(),
+        email=normalized_email,
         username=default_username,
         hashed_password=hashed,
         role="user",
-        is_active=True,
+        is_active=False,
+        is_email_verified=False,
         is_locked=False,
         failed_attempts=0,
         created_at=datetime.utcnow(),
@@ -238,15 +302,189 @@ async def register(
     await db.commit()
     await db.refresh(new_user)
 
-    # Generate dual tokens (5-min access + 7-day refresh) recorded in Redis and PostgreSQL
-    access_token, refresh_token = await issue_token_pair(new_user, db, request)
+    otp_code = generate_numeric_otp(6)
+    ttl_seconds = settings.OTP_EXPIRE_MINUTES * 60
+    await store_email_otp(new_user.email, otp_code, ttl_seconds=ttl_seconds)
+
+    try:
+        delivery = await send_verification_otp_email(
+            to_email=new_user.email,
+            username=new_user.username or default_username,
+            otp_code=otp_code,
+            expire_minutes=settings.OTP_EXPIRE_MINUTES,
+        )
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=str(exc),
+        )
+
+    return RegisterResponse(
+        status="verification_required",
+        verification_required=True,
+        email=new_user.email,
+        message=f"Verification code sent to {new_user.email}. Enter the 6-digit OTP to activate your account.",
+        expires_in_seconds=ttl_seconds,
+        cooldown_seconds=settings.OTP_RESEND_COOLDOWN_SECONDS,
+        max_resends=settings.OTP_MAX_RESENDS,
+        remaining_resends=settings.OTP_MAX_RESENDS,
+        dev_otp=otp_code if delivery.get("mode") == "console_fallback" else None,
+    )
+
+
+@router.post(
+    "/verify-email",
+    response_model=AuthResponse,
+    summary="Verify 6-digit email OTP to activate account and sign in",
+    dependencies=[Depends(rate_limit(max_requests=10, window_seconds=60, key_prefix="verify_email"))],
+)
+async def verify_email(
+    request: Request,
+    response: Response,
+    payload: VerifyEmailOTPRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Verify email onboarding OTP:
+    1. Checks 6-digit hashed OTP in Redis (max 5 attempts, 10-min TTL, single-use)
+    2. Marks user is_email_verified=True and is_active=True in PostgreSQL
+    3. Issues 5-min access + 7-day refresh JWT tokens and sets HttpOnly cookies
+    """
+    normalized_email = payload.email.lower().strip()
+    user_query = select(User).where(User.email == normalized_email)
+    result = await db.execute(user_query)
+    user = result.scalar_one_or_none()
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired verification code.",
+        )
+
+    if user.is_email_verified and user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This email address is already verified. Please sign in.",
+        )
+
+    is_valid, reason = await verify_email_otp(
+        email=normalized_email,
+        otp_code=payload.otp.strip(),
+        max_attempts=settings.OTP_MAX_ATTEMPTS,
+    )
+
+    if not is_valid:
+        if reason == "expired":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Verification code has expired. Please request a new code.",
+            )
+        if reason == "max_attempts":
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="Too many incorrect attempts. Your code was invalidated — please request a new code.",
+            )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid verification code. Please check your email and try again.",
+        )
+
+    # Activate user account and clear resend quota
+    user.is_email_verified = True
+    user.is_active = True
+    user.failed_attempts = 0
+    user.updated_at = datetime.utcnow()
+    await db.commit()
+    await db.refresh(user)
+    await clear_email_otp_resend_count(user.email)
+
+    # Issue authenticated session tokens immediately upon activation
+    access_token, refresh_token = await issue_token_pair(user, db, request)
     set_auth_cookies(response, access_token, refresh_token)
 
     return AuthResponse(
         access_token=access_token,
         refresh_token=refresh_token,
         token_type="bearer",
-        user=make_user_response(new_user),
+        user=make_user_response(user),
+    )
+
+
+@router.post(
+    "/resend-otp",
+    response_model=ResendOTPResponse,
+    summary="Resend a fresh 6-digit email verification OTP (up to 5 retries per hour)",
+    dependencies=[Depends(rate_limit(max_requests=5, window_seconds=60, key_prefix="resend_otp"))],
+)
+async def resend_otp(
+    request: Request,
+    payload: ResendOTPRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Resend a 6-digit onboarding OTP with 60-second cooldown and max 5 retries per hour.
+    """
+    client_ip = get_client_ip(request)
+    token = payload.turnstile_token or request.headers.get("x-turnstile-token")
+    if token:
+        await verify_turnstile_token(token=token, remote_ip=client_ip, expected_action=["auth", "resend_otp", "verify_email"])
+
+    normalized_email = payload.email.lower().strip()
+    max_resends = settings.OTP_MAX_RESENDS
+
+    # Enforce per-email hourly resend cap (default: 5 retries)
+    resends_used = await get_email_otp_resend_count(normalized_email)
+    if resends_used >= max_resends:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"Maximum verification email resend limit ({max_resends}/{max_resends}) reached. Please wait an hour before trying again.",
+        )
+
+    # Enforce cooldown between consecutive resends (default: 60 seconds)
+    cooldown = await get_email_otp_resend_cooldown(normalized_email)
+    if cooldown > 0:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"Please wait {cooldown} seconds before requesting another verification code.",
+            headers={"Retry-After": str(cooldown)},
+        )
+
+    user_query = select(User).where(User.email == normalized_email)
+    result = await db.execute(user_query)
+    user = result.scalar_one_or_none()
+
+    ttl_seconds = settings.OTP_EXPIRE_MINUTES * 60
+    dev_otp = None
+
+    if user and not user.is_email_verified:
+        otp_code = generate_numeric_otp(6)
+        await store_email_otp(user.email, otp_code, ttl_seconds=ttl_seconds)
+        try:
+            delivery = await send_verification_otp_email(
+                to_email=user.email,
+                username=user.username or user.email.split("@")[0],
+                otp_code=otp_code,
+                expire_minutes=settings.OTP_EXPIRE_MINUTES,
+            )
+            if delivery.get("mode") == "console_fallback":
+                dev_otp = otp_code
+        except RuntimeError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=str(exc),
+            )
+        resends_used = await increment_email_otp_resend_count(user.email)
+
+    remaining = max(0, max_resends - resends_used)
+    return ResendOTPResponse(
+        status="sent",
+        message=f"A new 6-digit verification code has been sent to {normalized_email}. ({remaining} of {max_resends} retries remaining)",
+        expires_in_seconds=ttl_seconds,
+        cooldown_seconds=settings.OTP_RESEND_COOLDOWN_SECONDS,
+        resends_used=resends_used,
+        max_resends=max_resends,
+        remaining_resends=remaining,
+        dev_otp=dev_otp,
     )
 
 
@@ -325,10 +563,36 @@ async def login(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    # Reset failed attempts upon successful login
+    # Reset failed attempts upon successful password check
     if user.failed_attempts > 0:
         user.failed_attempts = 0
         await db.commit()
+
+    # Enforce email OTP verification before allowing login
+    if not user.is_email_verified:
+        cooldown = await get_email_otp_resend_cooldown(user.email)
+        if cooldown == 0:
+            otp_code = generate_numeric_otp(6)
+            await store_email_otp(user.email, otp_code, ttl_seconds=settings.OTP_EXPIRE_MINUTES * 60)
+            try:
+                await send_verification_otp_email(
+                    to_email=user.email,
+                    username=user.username or user.email.split("@")[0],
+                    otp_code=otp_code,
+                    expire_minutes=settings.OTP_EXPIRE_MINUTES,
+                )
+            except RuntimeError:
+                pass
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"EMAIL_NOT_VERIFIED|{user.email}|Your account is not activated yet. Please enter the 6-digit verification code sent to {user.email}.",
+        )
+
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User account is deactivated. Please contact support.",
+        )
 
     # Generate dual tokens (5-min access + 7-day refresh) recorded in Redis and PostgreSQL
     access_token, refresh_token = await issue_token_pair(user, db, request)
@@ -908,18 +1172,34 @@ async def forgot_password(
     user = result.scalar_one_or_none()
 
     dev_reset_token = None
+    delivery_mode = "none"
     if user and user.is_active:
-        dev_reset_token = create_password_reset_token(
+        reset_token = create_password_reset_token(
             email=user.email,
             user_id=str(user.id),
             username=user.username,
         )
+        try:
+            delivery = await send_password_reset_email(
+                to_email=user.email,
+                username=user.username or user.email.split("@")[0],
+                reset_token=reset_token,
+            )
+            delivery_mode = delivery.get("mode", "smtp")
+        except RuntimeError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=str(exc),
+            )
+
+        # Only expose reset_token in response when SMTP is not configured (local dev fallback)
+        if delivery_mode == "console_fallback" or not is_smtp_configured():
+            dev_reset_token = reset_token
 
     response_data = {
         "status": "success",
-        "message": f"If an account exists for {payload.email}, password recovery instructions have been dispatched.",
+        "message": f"If an account exists for {payload.email}, password recovery instructions have been sent to your email.",
     }
-    # Expose reset token in response during local development for testing
     if dev_reset_token:
         response_data["reset_token"] = dev_reset_token
         if user:
@@ -1115,15 +1395,20 @@ async def google_auth(
     user = result.scalar_one_or_none()
 
     if user:
-        if not user.is_active:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="User account is deactivated.",
-            )
         if user.is_locked:
             raise HTTPException(
                 status_code=status.HTTP_423_LOCKED,
                 detail="User account is locked. Please contact support.",
+            )
+        # If user was only inactive because email OTP hadn't been verified yet, Google verifies their email!
+        if not user.is_email_verified:
+            user.is_email_verified = True
+            user.is_active = True
+            user.updated_at = datetime.utcnow()
+        elif not user.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="User account is deactivated.",
             )
 
         # Link google_id if account was originally email/password
@@ -1139,7 +1424,7 @@ async def google_auth(
         await db.commit()
         await db.refresh(user)
     else:
-        # Create new user via Google
+        # Create new user via Google (email already verified by Google)
         user = User(
             id=uuid.uuid4(),
             email=email,
@@ -1148,6 +1433,7 @@ async def google_auth(
             google_id=google_sub,
             role="user",
             is_active=True,
+            is_email_verified=True,
             is_locked=False,
             failed_attempts=0,
             created_at=datetime.utcnow(),

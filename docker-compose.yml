@@ -24,7 +24,7 @@ services:
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: [ "CMD", "redis-cli", "ping" ]
       interval: 5s
       timeout: 3s
       retries: 5
@@ -47,7 +47,7 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ./docker/db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-vault_user} -d ${POSTGRES_DB:-vault_db}"]
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-vault_user} -d ${POSTGRES_DB:-vault_db}" ]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -63,7 +63,7 @@ services:
     volumes:
       - clamav_data:/var/lib/clamav
     healthcheck:
-      test: ["CMD", "clamdcheck.sh"]
+      test: [ "CMD", "clamdcheck.sh" ]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -72,7 +72,7 @@ services:
       - vault_network
 
   minio:
-    image: minio/minio:latest
+    image: pgsty/silo:RELEASE.2026-10-26T00-00-00Z
     container_name: vault_minio
     restart: unless-stopped
     command: server /data --console-address ":9001"
@@ -85,7 +85,7 @@ services:
     volumes:
       - minio_data:/data
     healthcheck:
-      test: ["CMD", "mc", "ready", "local"]
+      test: [ "CMD", "mc", "ready", "local" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -108,6 +108,7 @@ services:
       SAM_LAMBDA_ENDPOINT_URL: ${SAM_LAMBDA_ENDPOINT_URL:-http://host.docker.internal:3002}
       MINIO_ENDPOINT_URL: ${MINIO_ENDPOINT_URL:-http://minio:9000}
       MINIO_BUCKET: ${MINIO_BUCKET:-vault-uploads}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     volumes:

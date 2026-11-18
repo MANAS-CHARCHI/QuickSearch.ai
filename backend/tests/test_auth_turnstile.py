@@ -45,33 +45,37 @@ def test_jwt_token_expiration():
 
 @pytest.mark.asyncio
 async def test_sliding_window_rate_limiter():
+    import uuid
+
     limiter = SlidingWindowRateLimiter(cleanup_interval_seconds=60)
-    
+    unique_prefix = f"test_{uuid.uuid4().hex[:8]}"
+
     # Mock dummy request and response
     class DummyRequest:
         headers = {"x-forwarded-for": "203.0.113.195"}
         client = None
 
     class DummyResponse:
-        headers = {}
+        def __init__(self):
+            self.headers = {}
 
     req = DummyRequest()
     res = DummyResponse()
 
     # Allowed 3 requests in 10-second window
-    await limiter.check(req, res, max_requests=3, window_seconds=10, key_prefix="test")
+    await limiter.check(req, res, max_requests=3, window_seconds=10, key_prefix=unique_prefix)
     assert res.headers["X-RateLimit-Limit"] == "3"
     assert res.headers["X-RateLimit-Remaining"] == "2"
 
-    await limiter.check(req, res, max_requests=3, window_seconds=10, key_prefix="test")
+    await limiter.check(req, res, max_requests=3, window_seconds=10, key_prefix=unique_prefix)
     assert res.headers["X-RateLimit-Remaining"] == "1"
 
-    await limiter.check(req, res, max_requests=3, window_seconds=10, key_prefix="test")
+    await limiter.check(req, res, max_requests=3, window_seconds=10, key_prefix=unique_prefix)
     assert res.headers["X-RateLimit-Remaining"] == "0"
 
     # 4th request must raise 429
     with pytest.raises(HTTPException) as exc_info:
-        await limiter.check(req, res, max_requests=3, window_seconds=10, key_prefix="test")
+        await limiter.check(req, res, max_requests=3, window_seconds=10, key_prefix=unique_prefix)
     assert exc_info.value.status_code == 429
     assert "Retry-After" in res.headers
 
@@ -399,4 +403,238 @@ def test_auth_response_dual_token_schema():
 
     logout_req = LogoutRequest(refresh_token="sample_refresh_jwt_123456")
     assert logout_req.refresh_token == "sample_refresh_jwt_123456"
+
+
+@pytest.mark.asyncio
+async def test_redis_distributed_rate_limiter_multi_instance():
+    """
+    Simulate two independent backend instances powered by pylimitx sharing a single Redis backend.
+    Both instances must enforce one unified distributed sliding-window rate limit.
+    """
+    class FakeSharedRedis:
+        def __init__(self):
+            self.zsets = {}
+            self.ttls = {}
+
+        async def eval(self, script, numkeys, key, limit, window_sec, now_ms, request_id):
+            limit = int(limit)
+            window_ms = int(window_sec) * 1000
+            now_ms = int(now_ms)
+            cutoff = now_ms - window_ms
+
+            entries = self.zsets.get(key, {})
+            entries = {m: score for m, score in entries.items() if score > cutoff}
+            self.zsets[key] = entries
+
+            count = len(entries)
+            if count >= limit:
+                return [0, 0, self.ttls.get(key, window_ms)]
+
+            entries[request_id] = now_ms
+            self.ttls[key] = window_ms
+            return [1, limit - count - 1, -1]
+
+    shared_redis = FakeSharedRedis()
+    # Two separate backend instance limiters pointing to the same Redis
+    instance_a = SlidingWindowRateLimiter(redis_client=shared_redis)
+    instance_b = SlidingWindowRateLimiter(redis_client=shared_redis)
+
+    class DummyRequest:
+        def __init__(self, ip: str):
+            self.headers = {"x-forwarded-for": ip}
+            self.client = None
+
+    class DummyResponse:
+        def __init__(self):
+            self.headers = {}
+
+    req_client_1 = DummyRequest("198.51.100.10")
+    res = DummyResponse()
+
+    # Request 1 hits Instance A
+    await instance_a.check(req_client_1, res, max_requests=3, window_seconds=30, key_prefix="auth_login")
+    assert res.headers["X-RateLimit-Limit"] == "3"
+    assert res.headers["X-RateLimit-Remaining"] == "2"
+
+    # Request 2 hits Instance B (shared Redis sees count=1 -> becomes 2)
+    await instance_b.check(req_client_1, res, max_requests=3, window_seconds=30, key_prefix="auth_login")
+    assert res.headers["X-RateLimit-Remaining"] == "1"
+
+    # Request 3 hits Instance A (shared Redis sees count=2 -> becomes 3)
+    await instance_a.check(req_client_1, res, max_requests=3, window_seconds=30, key_prefix="auth_login")
+    assert res.headers["X-RateLimit-Remaining"] == "0"
+
+    # Request 4 hits Instance B -> must be blocked globally with 429!
+    with pytest.raises(HTTPException) as exc_info:
+        await instance_b.check(req_client_1, res, max_requests=3, window_seconds=30, key_prefix="auth_login")
+    assert exc_info.value.status_code == 429
+    assert "Retry-After" in res.headers
+    assert shared_redis.ttls["pylimitx:auth_login:198.51.100.10"] == 30000
+
+    # A different client IP must still be allowed on Instance B
+    req_client_2 = DummyRequest("198.51.100.20")
+    res2 = DummyResponse()
+    await instance_b.check(req_client_2, res2, max_requests=3, window_seconds=30, key_prefix="auth_login")
+    assert res2.headers["X-RateLimit-Remaining"] == "2"
+
+
+@pytest.mark.asyncio
+async def test_redis_rate_limiter_circuit_breaker_fail_open():
+    """If Redis raises errors, pylimitx CircuitBreaker trips OPEN and fails open gracefully."""
+    class BrokenRedis:
+        def __init__(self):
+            self.calls = 0
+
+        async def eval(self, *args, **kwargs):
+            self.calls += 1
+            raise ConnectionError("Redis connection refused")
+
+    broken_redis = BrokenRedis()
+    limiter = SlidingWindowRateLimiter(
+        redis_client=broken_redis,
+        fail_open=True,
+        failure_threshold=2,
+        recovery_timeout=30,
+    )
+
+    class DummyRequest:
+        headers = {"x-forwarded-for": "198.51.100.99"}
+        client = None
+
+    class DummyResponse:
+        def __init__(self):
+            self.headers = {}
+
+    req = DummyRequest()
+    res = DummyResponse()
+
+    # First 2 calls hit Redis and fail -> CircuitBreaker trips to OPEN
+    await limiter.check(req, res, max_requests=2, window_seconds=10, key_prefix="cb_test")
+    await limiter.check(req, res, max_requests=2, window_seconds=10, key_prefix="cb_test")
+    assert limiter._get_engine().circuit_breaker.is_open is True
+    assert broken_redis.calls == 2
+
+    # 3rd call short-circuits in OPEN state without even calling Redis
+    await limiter.check(req, res, max_requests=2, window_seconds=10, key_prefix="cb_test")
+    assert broken_redis.calls == 2
+
+
+@pytest.mark.asyncio
+async def test_email_otp_generation_and_verification_lifecycle():
+    """Verify 6-digit OTP generation, hashed storage, single-use verification, attempt limits, and cooldown."""
+    import uuid
+    from app.core.redis import (
+        generate_numeric_otp,
+        store_email_otp,
+        verify_email_otp,
+        get_email_otp_resend_cooldown,
+    )
+
+    email = f"otp_test_{uuid.uuid4().hex[:8]}@vault.city"
+    otp = generate_numeric_otp(6)
+    assert len(otp) == 6
+    assert otp.isdigit()
+
+    await store_email_otp(email, otp, ttl_seconds=300)
+
+    # Cooldown must be active right after storing
+    cooldown = await get_email_otp_resend_cooldown(email, cooldown_seconds=60)
+    assert 50 <= cooldown <= 60
+
+    # Wrong OTP fails with "invalid"
+    wrong_otp = "000000" if otp != "000000" else "999999"
+    ok, reason = await verify_email_otp(email, wrong_otp, max_attempts=3)
+    assert ok is False
+    assert reason == "invalid"
+
+    # Correct OTP succeeds and is immediately consumed (single-use)
+    ok, reason = await verify_email_otp(email, otp, max_attempts=3)
+    assert ok is True
+    assert reason == "verified"
+
+    # Replaying the same OTP fails with "expired"
+    ok, reason = await verify_email_otp(email, otp, max_attempts=3)
+    assert ok is False
+    assert reason == "expired"
+
+    # Exceeding max attempts invalidates the OTP
+    otp2 = generate_numeric_otp(6)
+    await store_email_otp(email, otp2, ttl_seconds=300)
+    wrong2 = "111111" if otp2 != "111111" else "222222"
+    assert (await verify_email_otp(email, wrong2, max_attempts=2)) == (False, "invalid")
+    assert (await verify_email_otp(email, wrong2, max_attempts=2)) == (False, "max_attempts")
+    assert (await verify_email_otp(email, otp2, max_attempts=2)) == (False, "expired")
+
+
+@pytest.mark.asyncio
+async def test_email_otp_schemas_and_smtp_fallback(monkeypatch):
+    """Validate OTP request schemas and SMTP email dispatch fallback when credentials are unset."""
+    from pydantic import ValidationError
+    from app.schemas.auth import VerifyEmailOTPRequest, ResendOTPRequest, RegisterResponse
+    from app.services import email_service
+    from app.core.config import settings
+
+    # Valid 6-digit OTP
+    req = VerifyEmailOTPRequest(email="alice@vault.city", otp="042819")
+    assert req.otp == "042819"
+
+    # Non-6-digit or non-numeric OTP raises ValidationError
+    with pytest.raises(ValidationError):
+        VerifyEmailOTPRequest(email="alice@vault.city", otp="12345")
+    with pytest.raises(ValidationError):
+        VerifyEmailOTPRequest(email="alice@vault.city", otp="abcdef")
+
+    resend = ResendOTPRequest(email="alice@vault.city")
+    assert resend.email == "alice@vault.city"
+
+    reg_resp = RegisterResponse(
+        email="alice@vault.city",
+        message="OTP sent",
+        expires_in_seconds=600,
+    )
+    assert reg_resp.verification_required is True
+
+    # Test console fallback when SMTP credentials are not configured
+    monkeypatch.setattr(settings, "SMTP_USERNAME", None)
+    monkeypatch.setattr(settings, "SMTP_PASSWORD", None)
+    assert email_service.is_smtp_configured() is False
+
+    otp_delivery = await email_service.send_verification_otp_email(
+        to_email="alice@vault.city",
+        username="alice",
+        otp_code="042819",
+    )
+    assert otp_delivery["mode"] == "console_fallback"
+
+    reset_delivery = await email_service.send_password_reset_email(
+        to_email="alice@vault.city",
+        username="alice",
+        reset_token="sample-reset-token-12345",
+    )
+    assert reset_delivery["mode"] == "console_fallback"
+
+
+@pytest.mark.asyncio
+async def test_email_otp_resend_quota_counter():
+    """Verify per-email OTP resend counter increments up to cap and clears on verification."""
+    import uuid
+    from app.core.redis import (
+        get_email_otp_resend_count,
+        increment_email_otp_resend_count,
+        clear_email_otp_resend_count,
+    )
+
+    email = f"resend_quota_{uuid.uuid4().hex[:8]}@vault.city"
+    assert await get_email_otp_resend_count(email) == 0
+
+    for expected in range(1, 6):
+        used = await increment_email_otp_resend_count(email, window_seconds=3600)
+        assert used == expected
+    assert await get_email_otp_resend_count(email) == 5
+
+    await clear_email_otp_resend_count(email)
+    assert await get_email_otp_resend_count(email) == 0
+
+
+
 

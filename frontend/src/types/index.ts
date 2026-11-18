@@ -1,6 +1,6 @@
 export type TabType = 'chat' | 'vault' | 'upload' | 'activity' | 'settings';
 
-export type AuthMode = 'login' | 'signup' | 'forgot_password' | 'reset_password';
+export type AuthMode = 'login' | 'signup' | 'verify_email' | 'forgot_password' | 'reset_password';
 
 export interface UserProfile {
   id: string;
@@ -9,6 +9,7 @@ export interface UserProfile {
   fullName?: string;
   username?: string;
   role: 'user' | 'admin';
+  isEmailVerified?: boolean;
   hasGoogle?: boolean;
   hasPassword?: boolean;
 }

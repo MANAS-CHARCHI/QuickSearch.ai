@@ -278,13 +278,24 @@ export async function apiLogin(payload: {
   return { user, tokens: { accessToken: '', refreshToken: '', tokenType: 'cookie' } };
 }
 
-/** User Registration */
+/** User Registration (triggers 6-digit email OTP verification or links Google account) */
 export async function apiRegister(payload: {
   email: string;
   password: string;
   username?: string;
   turnstile_token?: string;
-}): Promise<{ user: UserProfile; tokens: AuthTokens }> {
+}): Promise<{
+  verificationRequired: boolean;
+  email: string;
+  message: string;
+  expiresInSeconds?: number;
+  cooldownSeconds?: number;
+  maxResends?: number;
+  remainingResends?: number;
+  devOtp?: string;
+  user?: UserProfile;
+  tokens?: AuthTokens;
+}> {
   const res = await fetch(`${API_BASE}/auth/register`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -297,6 +308,19 @@ export async function apiRegister(payload: {
     throw new Error(data.detail || 'Registration failed.');
   }
 
+  if (data.verification_required) {
+    return {
+      verificationRequired: true,
+      email: data.email || payload.email,
+      message: data.message || 'Verification code sent to your email.',
+      expiresInSeconds: data.expires_in_seconds,
+      cooldownSeconds: data.cooldown_seconds ?? 60,
+      maxResends: data.max_resends ?? 5,
+      remainingResends: data.remaining_resends ?? 5,
+      devOtp: data.dev_otp || undefined,
+    };
+  }
+
   const user: UserProfile = {
     id: data.user.id,
     email: data.user.email,
@@ -304,12 +328,80 @@ export async function apiRegister(payload: {
     fullName: data.user.username || data.user.email.split('@')[0],
     username: data.user.username,
     role: data.user.role || 'user',
+    isEmailVerified: data.user.is_email_verified ?? true,
+    hasGoogle: data.user.has_google,
+    hasPassword: data.user.has_password,
+  };
+
+  setAuthSession(undefined, user);
+  return {
+    verificationRequired: false,
+    email: user.email,
+    message: data.message || 'Account ready.',
+    user,
+    tokens: { accessToken: '', refreshToken: '', tokenType: 'cookie' },
+  };
+}
+
+/** Verify 6-digit email OTP to activate account and establish session */
+export async function apiVerifyEmailOTP(payload: {
+  email: string;
+  otp: string;
+}): Promise<{ user: UserProfile; tokens: AuthTokens }> {
+  const res = await fetch(`${API_BASE}/auth/verify-email`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify(payload),
+  });
+
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.detail || 'Verification failed. Please check your 6-digit code.');
+  }
+
+  const user: UserProfile = {
+    id: data.user.id,
+    email: data.user.email,
+    name: data.user.username || data.user.email.split('@')[0],
+    fullName: data.user.username || data.user.email.split('@')[0],
+    username: data.user.username,
+    role: data.user.role || 'user',
+    isEmailVerified: data.user.is_email_verified ?? true,
     hasGoogle: data.user.has_google,
     hasPassword: data.user.has_password,
   };
 
   setAuthSession(undefined, user);
   return { user, tokens: { accessToken: '', refreshToken: '', tokenType: 'cookie' } };
+}
+
+/** Resend 6-digit onboarding OTP */
+export async function apiResendOTP(payload: {
+  email: string;
+  turnstile_token?: string;
+}): Promise<{
+  status: string;
+  message: string;
+  expires_in_seconds: number;
+  cooldown_seconds: number;
+  resends_used?: number;
+  max_resends?: number;
+  remaining_resends?: number;
+  dev_otp?: string;
+}> {
+  const res = await fetch(`${API_BASE}/auth/resend-otp`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify(payload),
+  });
+
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.detail || 'Unable to resend verification code.');
+  }
+  return data;
 }
 
 /** Google Social Authentication with Google Identity Services ID Token */

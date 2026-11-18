@@ -17,8 +17,9 @@ class Settings(BaseSettings):
     MINIO_ENDPOINT_URL: str = "http://minio:9000"
     MINIO_BUCKET: str = "vault-uploads"
     
-    # Redis Cache & Token Map
+    # Redis Cache, Token Map & Distributed Rate Limiting (pylimitx)
     REDIS_URL: str = "redis://redis:6379/0"
+    RATE_LIMIT_FAIL_OPEN: bool = True
 
     # Security & JWT (5-min Access, 7-day Refresh)
     SECRET_KEY: str = "default_insecure_secret_key_change_in_production"
@@ -41,6 +42,28 @@ class Settings(BaseSettings):
     TURNSTILE_SITE_KEY: str = "0x4AAAAAAGDGaHDA7lQB_a7O"
     TURNSTILE_SECRET_KEY: str = "0x4AAAAAAGDGaBY2ZuBeRJzSHM3qBN27njY"
     TURNSTILE_VERIFY_URL: str = "https://challenges.cloudflare.com/turnstile/v0/siteverify"
+
+    # SMTP Email Delivery (Gmail STARTTLS default: smtp.gmail.com:587)
+    SMTP_ENABLED: bool = True
+    SMTP_HOST: str = "smtp.gmail.com"
+    SMTP_PORT: int = 587
+    SMTP_USERNAME: Optional[str] = None
+    SMTP_PASSWORD: Optional[str] = None
+    SMTP_FROM_EMAIL: Optional[str] = None
+    SMTP_FROM_NAME: str = "Vault City AI"
+    SMTP_USE_TLS: bool = True
+    SMTP_USE_SSL: bool = False
+    SMTP_VERIFY_SSL: bool = True  # Keep True in production; set False only for local dev behind antivirus TLS proxies
+    SMTP_CA_BUNDLE: Optional[str] = None  # Optional path to custom PEM CA certificate bundle
+    FRONTEND_URL: str = "http://localhost:3000"
+
+    # Email Verification OTP Settings
+    OTP_EXPIRE_MINUTES: int = 10
+    OTP_MAX_ATTEMPTS: int = 5
+    OTP_RESEND_COOLDOWN_SECONDS: int = 60
+    OTP_MAX_RESENDS: int = 5
+    OTP_RESEND_WINDOW_SECONDS: int = 3600  # 1 hour window for resend cap
+    SMTP_MAX_RETRIES: int = 2
     
     # CORS
     ALLOWED_ORIGINS: List[str] = [

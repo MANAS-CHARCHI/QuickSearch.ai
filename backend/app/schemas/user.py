@@ -15,7 +15,7 @@ class UserBase(BaseModel):
 
 
 class UserResponse(BaseModel):
-    """User profile response including social auth and master password status."""
+    """User profile response including social auth, email verification, and master password status."""
     model_config = ConfigDict(from_attributes=True)
 
     id: str
@@ -23,6 +23,7 @@ class UserResponse(BaseModel):
     username: Optional[str] = None
     role: str
     is_active: bool
+    is_email_verified: bool = True
     has_google: bool = False
     has_password: bool = False
     created_at: datetime
@@ -54,6 +55,7 @@ def make_user_response(user) -> UserResponse:
         username=user.username or user.email.split("@")[0],
         role=user.role,
         is_active=user.is_active,
+        is_email_verified=bool(getattr(user, "is_email_verified", True)),
         has_google=bool(getattr(user, "google_id", None)),
         has_password=bool(getattr(user, "hashed_password", None)),
         created_at=user.created_at,

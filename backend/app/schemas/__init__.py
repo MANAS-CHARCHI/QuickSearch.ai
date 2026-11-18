@@ -13,9 +13,13 @@ from app.schemas.auth import (
     LogoutRequest,
     PasswordResetResponse,
     RefreshTokenRequest,
+    RegisterResponse,
+    ResendOTPRequest,
+    ResendOTPResponse,
     ResetPasswordRequest,
     UserLoginRequest,
     UserRegisterRequest,
+    VerifyEmailOTPRequest,
 )
 from app.schemas.conversation import (
     ChatMessageCreate,
@@ -60,6 +64,10 @@ __all__ = [
     "ResetPasswordRequest",
     "PasswordResetResponse",
     "AuthResponse",
+    "RegisterResponse",
+    "VerifyEmailOTPRequest",
+    "ResendOTPRequest",
+    "ResendOTPResponse",
     "RefreshTokenRequest",
     "LogoutRequest",
     # File

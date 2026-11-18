@@ -115,3 +115,50 @@ class RevokeSessionsRequest(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     keep_current: bool = Field(False, description="Whether to keep the current device session active")
+
+
+class RegisterResponse(BaseModel):
+    """Registration response: either prompts 6-digit email OTP verification or returns active session (Google link)."""
+    model_config = ConfigDict(from_attributes=True)
+
+    status: str = "verification_required"
+    verification_required: bool = True
+    email: str
+    message: str
+    expires_in_seconds: Optional[int] = None
+    cooldown_seconds: int = 60
+    max_resends: int = 5
+    remaining_resends: int = 5
+    access_token: Optional[str] = None
+    refresh_token: Optional[str] = None
+    token_type: str = "bearer"
+    user: Optional[UserResponse] = None
+    dev_otp: Optional[str] = None
+
+
+class VerifyEmailOTPRequest(BaseModel):
+    """Request payload to verify 6-digit onboarding OTP and activate account."""
+    model_config = ConfigDict(extra="ignore")
+
+    email: str = Field(..., min_length=3, max_length=255, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$", description="Registered email address")
+    otp: str = Field(..., min_length=6, max_length=6, pattern=r"^\d{6}$", description="6-digit numeric OTP code")
+
+
+class ResendOTPRequest(BaseModel):
+    """Request payload to resend a fresh 6-digit verification OTP."""
+    model_config = ConfigDict(extra="ignore")
+
+    email: str = Field(..., min_length=3, max_length=255, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$", description="Registered email address")
+    turnstile_token: Optional[str] = Field(None, description="Optional Cloudflare Turnstile challenge token")
+
+
+class ResendOTPResponse(BaseModel):
+    """Response after dispatching a fresh email verification OTP."""
+    status: str = "sent"
+    message: str
+    expires_in_seconds: int
+    cooldown_seconds: int
+    resends_used: int = 0
+    max_resends: int = 5
+    remaining_resends: int = 5
+    dev_otp: Optional[str] = None

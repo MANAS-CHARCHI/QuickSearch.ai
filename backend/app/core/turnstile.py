@@ -99,8 +99,18 @@ async def verify_turnstile_token(
         else:
             allowed = {str(a).lower() for a in expected_action}
 
-        # Any authentication action is compatible across login/signup/google/forgot/register
-        AUTH_FAMILY = {"auth", "login", "signup", "register", "google_auth", "forgot_password", "reset_password"}
+        # Any authentication action is compatible across login/signup/google/forgot/register/verify
+        AUTH_FAMILY = {
+            "auth",
+            "login",
+            "signup",
+            "register",
+            "google_auth",
+            "forgot_password",
+            "reset_password",
+            "verify_email",
+            "resend_otp",
+        }
         is_both_auth = (actual_action in AUTH_FAMILY) and any(a in AUTH_FAMILY for a in allowed)
 
         if actual_action not in allowed and not is_both_auth:

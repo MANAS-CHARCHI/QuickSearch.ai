@@ -108,9 +108,16 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 social single sign-on
               </p>
             </div>
-            <span className="text-[10px] text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded font-mono">
-              connected
-            </span>
+            {currentUser?.hasGoogle ? (
+              <span className="text-[10px] text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded font-mono flex items-center gap-1">
+                <Check className="w-3 h-3" />
+                connected
+              </span>
+            ) : (
+              <span className="text-[10px] text-stone-500 dark:text-stone-400 bg-stone-100 dark:bg-[#251A12] border border-stone-200 dark:border-stone-800 px-2 py-0.5 rounded font-mono">
+                not connected
+              </span>
+            )}
           </div>
 
           <div className="pt-2 border-t border-orange-100 dark:border-[#2D2118]/80 flex items-center justify-between text-xs">

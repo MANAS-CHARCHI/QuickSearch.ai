@@ -1,11 +1,13 @@
-import React, { useState, useEffect } from 'react';
-import { Eye, EyeOff, ArrowRight, ShieldCheck, Mail, Lock, ArrowLeft, Sun, Moon, Check, KeyRound } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Eye, EyeOff, ArrowRight, ShieldCheck, Mail, Lock, ArrowLeft, Sun, Moon, Check, KeyRound, RefreshCw } from 'lucide-react';
 import { AuthMode, UserProfile } from '../types';
 import { AuthIllustration } from './AuthIllustration';
 import { TurnstileWidget } from './TurnstileWidget';
 import {
   apiLogin,
   apiRegister,
+  apiVerifyEmailOTP,
+  apiResendOTP,
   apiGoogleAuth,
   apiForgotPassword,
   apiResetPassword,
@@ -61,6 +63,102 @@ export const AuthView: React.FC<AuthViewProps> = ({
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+
+  // Email OTP onboarding verification state
+  const [pendingEmail, setPendingEmail] = useState('');
+  const [otpDigits, setOtpDigits] = useState<string[]>(['', '', '', '', '', '']);
+  const [resendCooldown, setResendCooldown] = useState<number>(0);
+  const [remainingResends, setRemainingResends] = useState<number>(5);
+  const [maxResends, setMaxResends] = useState<number>(5);
+  const [isResending, setIsResending] = useState<boolean>(false);
+  const otpInputRefs = useRef<Array<HTMLInputElement | null>>([]);
+
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const timer = setInterval(() => {
+      setResendCooldown((prev) => (prev > 1 ? prev - 1 : 0));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [resendCooldown]);
+
+  const handleOtpChange = (index: number, rawValue: string) => {
+    const cleaned = rawValue.replace(/\D/g, '');
+    if (!cleaned) {
+      const next = [...otpDigits];
+      next[index] = '';
+      setOtpDigits(next);
+      return;
+    }
+
+    // Handle multi-digit paste/autofill directly into any input
+    if (cleaned.length > 1) {
+      const next = [...otpDigits];
+      for (let i = 0; i < 6; i++) {
+        next[i] = cleaned[i] || '';
+      }
+      setOtpDigits(next);
+      const focusIdx = Math.min(cleaned.length, 5);
+      otpInputRefs.current[focusIdx]?.focus();
+      return;
+    }
+
+    const next = [...otpDigits];
+    next[index] = cleaned;
+    setOtpDigits(next);
+    if (index < 5) {
+      otpInputRefs.current[index + 1]?.focus();
+    }
+  };
+
+  const handleOtpKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Backspace' && !otpDigits[index] && index > 0) {
+      otpInputRefs.current[index - 1]?.focus();
+    }
+  };
+
+  const handleOtpPaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    e.preventDefault();
+    const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
+    if (!pasted) return;
+    const next = ['', '', '', '', '', ''];
+    for (let i = 0; i < pasted.length; i++) {
+      next[i] = pasted[i];
+    }
+    setOtpDigits(next);
+    otpInputRefs.current[Math.min(pasted.length, 5)]?.focus();
+  };
+
+  const handleResendOtp = async () => {
+    if (!pendingEmail || resendCooldown > 0 || remainingResends <= 0 || isResending) return;
+    setIsResending(true);
+    setErrorMessage(null);
+    setSuccessMessage(null);
+    try {
+      const res = await apiResendOTP({ email: pendingEmail });
+      setOtpDigits(['', '', '', '', '', '']);
+      setResendCooldown(res.cooldown_seconds || 60);
+      if (typeof res.max_resends === 'number') setMaxResends(res.max_resends);
+      if (typeof res.remaining_resends === 'number') {
+        setRemainingResends(res.remaining_resends);
+      } else {
+        setRemainingResends((prev) => Math.max(0, prev - 1));
+      }
+      if (res.dev_otp) {
+        setSuccessMessage(`New code dispatched! (Dev console fallback OTP: ${res.dev_otp})`);
+      } else {
+        setSuccessMessage(res.message || `A fresh 6-digit verification code has been sent to ${pendingEmail}.`);
+      }
+      setTimeout(() => otpInputRefs.current[0]?.focus(), 50);
+    } catch (err: any) {
+      const msg: string = err?.message || 'Could not resend verification code.';
+      if (msg.toLowerCase().includes('maximum verification email resend limit')) {
+        setRemainingResends(0);
+      }
+      setErrorMessage(msg);
+    } finally {
+      setIsResending(false);
+    }
+  };
 
   const googleClientId =
     (import.meta as any).env?.VITE_GOOGLE_CLIENT_ID ||
@@ -190,6 +288,29 @@ export const AuthView: React.FC<AuthViewProps> = ({
 
     const effectiveToken = turnstileToken || '1x00000000000000000000AA';
 
+    // 0. Email OTP Verification & Account Activation
+    if (mode === 'verify_email') {
+      const otpCode = otpDigits.join('').trim();
+      if (otpCode.length !== 6 || !/^\d{6}$/.test(otpCode)) {
+        setErrorMessage('Please enter the complete 6-digit verification code sent to your email.');
+        return;
+      }
+
+      setIsLoading(true);
+      try {
+        const result = await apiVerifyEmailOTP({
+          email: pendingEmail || email.trim(),
+          otp: otpCode,
+        });
+        onLoginSuccess(result.user);
+      } catch (err: any) {
+        setErrorMessage(err.message || 'Verification failed. Please check your 6-digit code.');
+      } finally {
+        setIsLoading(false);
+      }
+      return;
+    }
+
     // 1. Password Reset Completion (New Password + Token)
     if (mode === 'reset_password') {
       if (!resetToken.trim()) {
@@ -293,10 +414,38 @@ export const AuthView: React.FC<AuthViewProps> = ({
           username: email.includes('@') ? email.split('@')[0] : email,
           turnstile_token: effectiveToken,
         });
-        onLoginSuccess(result.user);
+        if (result.verificationRequired) {
+          setPendingEmail(result.email);
+          setOtpDigits(['', '', '', '', '', '']);
+          setResendCooldown(result.cooldownSeconds ?? 60);
+          setMaxResends(result.maxResends ?? 5);
+          setRemainingResends(result.remainingResends ?? 5);
+          setMode('verify_email');
+          if (result.devOtp) {
+            setSuccessMessage(`${result.message} (Dev console fallback OTP: ${result.devOtp})`);
+          } else {
+            setSuccessMessage(result.message);
+          }
+          setTimeout(() => otpInputRefs.current[0]?.focus(), 80);
+        } else if (result.user) {
+          onLoginSuccess(result.user);
+        }
       }
     } catch (err: any) {
-      setErrorMessage(err.message || 'Authentication failed. Please verify credentials.');
+      const msg: string = err?.message || 'Authentication failed. Please verify credentials.';
+      if (msg.startsWith('EMAIL_NOT_VERIFIED|')) {
+        const parts = msg.split('|');
+        const unverifiedEmail = parts[1] || email.trim();
+        const friendlyMsg = parts[2] || `Please enter the 6-digit verification code sent to ${unverifiedEmail}.`;
+        setPendingEmail(unverifiedEmail);
+        setOtpDigits(['', '', '', '', '', '']);
+        setResendCooldown(60);
+        setMode('verify_email');
+        setSuccessMessage(friendlyMsg);
+        setTimeout(() => otpInputRefs.current[0]?.focus(), 80);
+      } else {
+        setErrorMessage(msg);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -341,7 +490,7 @@ export const AuthView: React.FC<AuthViewProps> = ({
           <div className="lg:col-span-6 bg-white dark:bg-[#1C1510] border border-orange-200/80 dark:border-[#2D2118] rounded-2xl p-6 sm:p-7 shadow-val transition-all">
             {/* Title & Subtitle */}
             <div className="mb-6 space-y-1">
-              {(mode === 'forgot_password' || mode === 'reset_password') && (
+              {(mode === 'forgot_password' || mode === 'reset_password' || mode === 'verify_email') && (
                 <button
                   type="button"
                   onClick={() => switchMode('login')}
@@ -354,12 +503,14 @@ export const AuthView: React.FC<AuthViewProps> = ({
               <h2 className="text-lg sm:text-xl font-bold tracking-tight text-stone-900 dark:text-white font-mono">
                 {mode === 'login' && 'Sign in to Vault City'}
                 {mode === 'signup' && 'Create your account'}
+                {mode === 'verify_email' && 'Verify your email'}
                 {mode === 'forgot_password' && 'Reset master password'}
                 {mode === 'reset_password' && 'Set new master password'}
               </h2>
               <p className="text-xs text-stone-500 dark:text-stone-400 font-sans">
                 {mode === 'login' && 'Access your encrypted personal documents and records.'}
                 {mode === 'signup' && 'Private, zero-knowledge storage for your identity & health files.'}
+                {mode === 'verify_email' && `Enter the 6-digit verification code sent to ${pendingEmail || email}.`}
                 {mode === 'forgot_password' && 'Enter your email or username to receive recovery instructions.'}
                 {mode === 'reset_password' && 'Enter your recovery token and choose a new master password.'}
               </p>
@@ -379,7 +530,7 @@ export const AuthView: React.FC<AuthViewProps> = ({
             )}
 
             {/* Google Social Auth */}
-            {mode !== 'forgot_password' && mode !== 'reset_password' && (
+            {mode !== 'forgot_password' && mode !== 'reset_password' && mode !== 'verify_email' && (
               <div className="space-y-3 mb-5">
                 <button
                   type="button"
@@ -417,8 +568,60 @@ export const AuthView: React.FC<AuthViewProps> = ({
               </div>
             )}
 
-            {/* Email / Password Form */}
+            {/* Email / Password / OTP Form */}
             <form onSubmit={handleSubmit} className="space-y-3.5 font-mono">
+              {/* Verify Email: 6-Digit OTP Verification Inputs */}
+              {mode === 'verify_email' && (
+                <div className="space-y-4 py-1">
+                  <div>
+                    <label className="block text-[11px] font-medium text-stone-700 dark:text-stone-300 mb-2">
+                      6-Digit Verification Code
+                    </label>
+                    <div className="grid grid-cols-6 gap-2 sm:gap-2.5">
+                      {otpDigits.map((digit, idx) => (
+                        <input
+                          key={idx}
+                          ref={(el) => {
+                            otpInputRefs.current[idx] = el;
+                          }}
+                          type="text"
+                          inputMode="numeric"
+                          autoComplete={idx === 0 ? 'one-time-code' : 'off'}
+                          maxLength={6}
+                          value={digit}
+                          onChange={(e) => handleOtpChange(idx, e.target.value)}
+                          onKeyDown={(e) => handleOtpKeyDown(idx, e)}
+                          onPaste={handleOtpPaste}
+                          aria-label={`Verification code digit ${idx + 1}`}
+                          className="w-full h-11 sm:h-12 text-center text-base sm:text-lg font-bold bg-stone-50 dark:bg-[#181820] border border-stone-300 dark:border-stone-700 rounded-xl text-stone-900 dark:text-white focus:outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 transition-all font-mono"
+                        />
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between text-[11px] text-stone-500 dark:text-stone-400">
+                    <span>Code expires in 10 min • {remainingResends}/{maxResends} retries left</span>
+                    <button
+                      type="button"
+                      onClick={handleResendOtp}
+                      disabled={resendCooldown > 0 || remainingResends <= 0 || isResending}
+                      className="inline-flex items-center space-x-1 font-semibold text-orange-600 dark:text-orange-400 hover:underline disabled:opacity-50 disabled:no-underline cursor-pointer disabled:cursor-not-allowed"
+                    >
+                      <RefreshCw className={`w-3 h-3 ${isResending ? 'animate-spin' : ''}`} />
+                      <span>
+                        {isResending
+                          ? 'Sending...'
+                          : remainingResends <= 0
+                          ? 'Retry limit reached'
+                          : resendCooldown > 0
+                          ? `Resend in ${resendCooldown}s`
+                          : 'Resend code'}
+                      </span>
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {/* Reset Password: Token Field */}
               {mode === 'reset_password' && (
                 <div>
@@ -440,19 +643,23 @@ export const AuthView: React.FC<AuthViewProps> = ({
               )}
 
               {/* Login, Signup, or Forgot Password: Email / Username Field */}
-              {mode !== 'reset_password' && (
+              {mode !== 'reset_password' && mode !== 'verify_email' && (
                 <div>
                   <label className="block text-[11px] font-medium text-stone-700 dark:text-stone-300 mb-1">
-                    {mode === 'forgot_password' ? 'Email Address or Username' : 'Email Address / Username'}
+                    {mode === 'signup'
+                      ? 'Email Address'
+                      : mode === 'forgot_password'
+                      ? 'Email Address or Username'
+                      : 'Email Address / Username'}
                   </label>
                   <div className="relative">
                     <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-stone-400" />
                     <input
-                      type="text"
+                      type={mode === 'signup' ? 'email' : 'text'}
                       required
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
-                      placeholder="user@domain.com or username"
+                      placeholder={mode === 'signup' ? 'you@gmail.com' : 'user@domain.com or username'}
                       autoComplete="username"
                       className="w-full bg-stone-50 dark:bg-[#181820] border border-stone-200 dark:border-stone-700 rounded-lg pl-8 pr-3 py-2 text-xs text-stone-900 dark:text-white placeholder-stone-400 focus:outline-none focus:border-stone-400 dark:focus:border-stone-600 transition-colors font-mono"
                     />
@@ -474,7 +681,7 @@ export const AuthView: React.FC<AuthViewProps> = ({
               )}
 
               {/* Password Field (for Login, Signup, or Reset Password) */}
-              {mode !== 'forgot_password' && (
+              {mode !== 'forgot_password' && mode !== 'verify_email' && (
                 <div>
                   <div className="flex items-center justify-between mb-1">
                     <label className="text-[11px] font-medium text-stone-700 dark:text-stone-300">
@@ -534,16 +741,18 @@ export const AuthView: React.FC<AuthViewProps> = ({
               )}
 
               {/* Cloudflare Turnstile Human Verification Challenge */}
-              <TurnstileWidget
-                isDark={isDark}
-                action={mode}
-                onVerify={(token) => setTurnstileToken(token)}
-                onExpire={() => setTurnstileToken(null)}
-              />
+              {mode !== 'verify_email' && (
+                <TurnstileWidget
+                  isDark={isDark}
+                  action={mode}
+                  onVerify={(token) => setTurnstileToken(token)}
+                  onExpire={() => setTurnstileToken(null)}
+                />
+              )}
 
               <button
                 type="submit"
-                disabled={isLoading}
+                disabled={isLoading || (mode === 'verify_email' && otpDigits.join('').length !== 6)}
                 className="w-full mt-2 py-2.5 px-4 bg-orange-600 hover:bg-orange-700 text-white dark:bg-orange-500 dark:hover:bg-orange-400 dark:text-stone-950 rounded-xl text-xs font-semibold font-sans transition-all cursor-pointer flex items-center justify-center space-x-1.5 shadow-sm active:scale-[0.99] disabled:opacity-50"
               >
                 <span>
@@ -553,8 +762,10 @@ export const AuthView: React.FC<AuthViewProps> = ({
                     ? 'Sign In to Vault'
                     : mode === 'signup'
                     ? 'Create Master Account'
+                    : mode === 'verify_email'
+                    ? 'Verify & Activate Account'
                     : mode === 'forgot_password'
-                    ? 'Send Recovery Token'
+                    ? 'Send Recovery Link'
                     : 'Update Master Password'}
                 </span>
                 {!isLoading && <ArrowRight className="w-3.5 h-3.5" />}
@@ -584,6 +795,18 @@ export const AuthView: React.FC<AuthViewProps> = ({
                     className="font-semibold text-stone-900 dark:text-white hover:underline cursor-pointer"
                   >
                     Sign in
+                  </button>
+                </p>
+              )}
+              {mode === 'verify_email' && (
+                <p>
+                  Entered the wrong email?{' '}
+                  <button
+                    type="button"
+                    onClick={() => switchMode('signup')}
+                    className="font-semibold text-stone-900 dark:text-white hover:underline cursor-pointer"
+                  >
+                    Use a different email
                   </button>
                 </p>
               )}
