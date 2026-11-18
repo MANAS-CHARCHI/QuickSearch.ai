@@ -1,0 +1,25 @@
+version = 0.1
+
+[default.global.parameters]
+stack_name = "vault-city-sam-pipeline"
+region = "us-east-1"
+
+[default.build.parameters]
+cached = true
+parallel = true
+
+[default.local_invoke.parameters]
+docker_network = "vault_network"
+env_vars = "env.json"
+
+[default.local_start_api.parameters]
+docker_network = "vault_network"
+env_vars = "env.json"
+port = 3001
+warm_containers = "EAGER"
+
+[default.local_start_lambda.parameters]
+docker_network = "vault_network"
+env_vars = "env.json"
+port = 3002
+warm_containers = "EAGER"

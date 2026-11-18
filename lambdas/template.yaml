@@ -1,0 +1,196 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  Vault City (quick-search-ai) AWS SAM Local & Cloud Lambda Pipeline:
+  1. FileScanAndExtractFunction: ClamAV virus scanning + multi-format text extraction + sparse-image routing.
+  2. ImageVLMDescriptionFunction: Isolated VLM MicroVM (zero DB/secret access) describing images & unreadable scans.
+  3. TextSecurityAndVectorizeFunction: Dual ONNX ML scanners (SQLi + AI Prompt Injection) + chunking + PostgreSQL pgvector storage.
+
+Parameters:
+  LambdaArchitecture:
+    Type: String
+    Default: arm64
+    AllowedValues:
+      - arm64
+      - x86_64
+    Description: Match host architecture locally (arm64 on Apple Silicon, x86_64 on Intel/AWS x86).
+  DatabaseUrl:
+    Type: String
+    Default: postgresql://vault_user:vault_secure_password@db:5432/vault_db
+    NoEcho: true
+  ClamAvHost:
+    Type: String
+    Default: clamav
+  ClamAvPort:
+    Type: String
+    Default: '3310'
+  S3EndpointUrl:
+    Type: String
+    Default: http://minio:9000
+  S3AccessKey:
+    Type: String
+    Default: vault_minio_admin
+  S3SecretKey:
+    Type: String
+    Default: vault_minio_secret
+    NoEcho: true
+  LambdaEndpointUrl:
+    Type: String
+    Default: http://host.docker.internal:3002
+  VlmMode:
+    Type: String
+    Default: embedded
+    AllowedValues:
+      - embedded
+      - ollama
+  OllamaUrl:
+    Type: String
+    Default: http://host.docker.internal:11434
+  OllamaModel:
+    Type: String
+    Default: moondream
+  SqliThreshold:
+    Type: String
+    Default: '0.80'
+  PromptInjectionThreshold:
+    Type: String
+    Default: '0.80'
+
+Globals:
+  Function:
+    Architectures:
+      - !Ref LambdaArchitecture
+    Tracing: Active
+
+Resources:
+  # ---------------------------------------------------------------------------
+  # Local & Cloud HTTP API Gateway (optional HTTP interface alongside Invoke)
+  # ---------------------------------------------------------------------------
+  VaultPipelineApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: local
+      Cors:
+        AllowMethods: "'POST,OPTIONS'"
+        AllowHeaders: "'Content-Type,Authorization'"
+        AllowOrigin: "'*'"
+
+  # ---------------------------------------------------------------------------
+  # Lambda 1: Virus Scan (ClamAV) + Text Extraction + Image/Scan Routing
+  # ---------------------------------------------------------------------------
+  FileScanAndExtractFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: vault-file-scan-extract
+      PackageType: Image
+      MemorySize: 1024
+      Timeout: 60
+      Environment:
+        Variables:
+          CLAMAV_HOST: !Ref ClamAvHost
+          CLAMAV_PORT: !Ref ClamAvPort
+          CLAMAV_FALLBACK_EICAR: 'true'
+          S3_ENDPOINT_URL: !Ref S3EndpointUrl
+          AWS_ACCESS_KEY_ID: !Ref S3AccessKey
+          AWS_SECRET_ACCESS_KEY: !Ref S3SecretKey
+          LAMBDA_ENDPOINT_URL: !Ref LambdaEndpointUrl
+          VLM_FUNCTION_NAME: !Ref ImageVLMDescriptionFunction
+          SECURITY_VECTOR_FUNCTION_NAME: !Ref TextSecurityAndVectorizeFunction
+          MAX_FILE_SIZE_BYTES: '26214400'
+          SPARSE_TEXT_MIN_CHARS: '50'
+      Policies:
+        - LambdaInvokePolicy:
+            FunctionName: !Ref ImageVLMDescriptionFunction
+        - LambdaInvokePolicy:
+            FunctionName: !Ref TextSecurityAndVectorizeFunction
+      Events:
+        ScanExtractApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref VaultPipelineApi
+            Path: /scan-extract
+            Method: post
+    Metadata:
+      DockerTag: python3.12-v1
+      DockerContext: ./file_scanner_extractor
+      Dockerfile: Dockerfile
+
+  # ---------------------------------------------------------------------------
+  # Lambda 3: Isolated VLM MicroVM (Zero DB credentials, Zero Redis, Stateless)
+  # Runs natively in AWS Firecracker microVM in cloud / Docker microVM locally.
+  # ---------------------------------------------------------------------------
+  ImageVLMDescriptionFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: vault-image-vlm-describer
+      PackageType: Image
+      MemorySize: 3072
+      Timeout: 120
+      Environment:
+        Variables:
+          VLM_MODE: !Ref VlmMode
+          VLM_MODEL_ID: HuggingFaceTB/SmolVLM-500M-Instruct
+          VLM_MODEL_DIR: /opt/models/vlm
+          OLLAMA_URL: !Ref OllamaUrl
+          OLLAMA_MODEL: !Ref OllamaModel
+          MAX_IMAGE_DIM: '1024'
+          # Intentionally NO DATABASE_URL, NO REDIS_URL, NO S3 credentials
+      Events:
+        DescribeImageApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref VaultPipelineApi
+            Path: /describe-image
+            Method: post
+    Metadata:
+      DockerTag: python3.12-v1
+      DockerContext: ./image_vlm_describer
+      Dockerfile: Dockerfile
+
+  # ---------------------------------------------------------------------------
+  # Lambda 2: Dual ML Security Scanner (SQLi + Prompt Injection) + pgvector
+  # ---------------------------------------------------------------------------
+  TextSecurityAndVectorizeFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: vault-text-security-vectorize
+      PackageType: Image
+      MemorySize: 2048
+      Timeout: 120
+      Environment:
+        Variables:
+          DATABASE_URL: !Ref DatabaseUrl
+          MODEL_CACHE_DIR: /opt/models
+          SQLI_MODEL_ID: cssupport/mobilebert-sql-injection-detect
+          PROMPT_INJECTION_MODEL_ID: ProtectAI/deberta-v3-small-prompt-injection-v2
+          EMBEDDING_MODEL_ID: BAAI/bge-small-en-v1.5
+          VECTOR_DIMENSION: '384'
+          SQLI_THRESHOLD: !Ref SqliThreshold
+          PROMPT_INJECTION_THRESHOLD: !Ref PromptInjectionThreshold
+          CHUNK_SIZE: '1000'
+          CHUNK_OVERLAP: '150'
+      Events:
+        SecurityVectorizeApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref VaultPipelineApi
+            Path: /security-vectorize
+            Method: post
+    Metadata:
+      DockerTag: python3.12-v1
+      DockerContext: ./ml_security_vectorizer
+      Dockerfile: Dockerfile
+
+Outputs:
+  VaultPipelineApiUrl:
+    Description: Local/Cloud API Gateway endpoint URL
+    Value: !Sub 'https://${VaultPipelineApi}.execute-api.${AWS::Region}.amazonaws.com/local/'
+  FileScanAndExtractFunctionArn:
+    Description: Lambda 1 ARN (Virus Scan + Text Extraction)
+    Value: !GetAtt FileScanAndExtractFunction.Arn
+  ImageVLMDescriptionFunctionArn:
+    Description: Lambda 3 ARN (Isolated VLM MicroVM Image Describer)
+    Value: !GetAtt ImageVLMDescriptionFunction.Arn
+  TextSecurityAndVectorizeFunctionArn:
+    Description: Lambda 2 ARN (ML Security Scanner + pgvector Ingestion)
+    Value: !GetAtt TextSecurityAndVectorizeFunction.Arn

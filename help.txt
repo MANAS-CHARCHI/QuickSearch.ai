@@ -1,0 +1,16 @@
+# 1. Install AWS SAM CLI (not yet installed on this Mac)
+brew install aws-sam-cli
+
+# 2. Start Postgres (pgvector), Redis, ClamAV, and MinIO
+cd lambdas && make up
+
+# 3. Validate & build all 3 Lambda container images
+make validate && make build
+
+# 4. Run local SAM tests or start local API/Lambda servers
+make test-clean
+make test-virus
+make test-sqli
+make test-prompt-injection
+make start-api     # Port 3001
+make start-lambda  # Port 3002 (for Lambda-to-Lambda chaining)

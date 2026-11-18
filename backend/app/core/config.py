@@ -10,6 +10,12 @@ class Settings(BaseSettings):
     # Database (PostgreSQL + pgvector)
     DATABASE_URL: str = "postgresql+asyncpg://vault_user:vault_secure_password@db:5432/vault_db"
     VECTOR_DIMENSION: int = 384
+
+    # AWS SAM Local Lambda Pipeline & MinIO (Local S3)
+    SAM_API_URL: str = "http://host.docker.internal:3001"
+    SAM_LAMBDA_ENDPOINT_URL: str = "http://host.docker.internal:3002"
+    MINIO_ENDPOINT_URL: str = "http://minio:9000"
+    MINIO_BUCKET: str = "vault-uploads"
     
     # Redis Cache & Token Map
     REDIS_URL: str = "redis://redis:6379/0"
