@@ -11,11 +11,30 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "postgresql+asyncpg://vault_user:vault_secure_password@db:5432/vault_db"
     VECTOR_DIMENSION: int = 384
 
-    # AWS SAM Local Lambda Pipeline & MinIO (Local S3)
+    # AWS SAM Local Lambda Pipeline, ClamAV & MinIO/S3 (Quarantine -> Secured Vault)
     SAM_API_URL: str = "http://host.docker.internal:3001"
     SAM_LAMBDA_ENDPOINT_URL: str = "http://host.docker.internal:3002"
+    USE_SAM_PIPELINE: bool = True
     MINIO_ENDPOINT_URL: str = "http://minio:9000"
+    MINIO_ACCESS_KEY: str = "vault_minio_admin"
+    MINIO_SECRET_KEY: str = "vault_minio_secret"
+    MINIO_REGION: str = "us-east-1"
     MINIO_BUCKET: str = "vault-uploads"
+    S3_QUARANTINE_BUCKET: str = "vault-quarantine"
+    S3_SECURED_BUCKET: str = "vault-secured"
+    CLAMAV_HOST: str = "clamav"
+    CLAMAV_PORT: int = 3310
+    MAX_UPLOAD_SIZE_BYTES: int = 25 * 1024 * 1024  # 25 MB
+    USER_STORAGE_QUOTA_BYTES: int = 500 * 1024 * 1024  # 500 MB
+
+    # Host-mounted File Pipeline Logs (persisted in ./logs on host + docker logs stdout)
+    FILE_LOG_DIR: str = "/app/logs"
+
+    # Vision / Image Summary Engine (Gemini Vision -> Ollama VLM -> Built-in Tesseract OCR + Analyzer)
+    GEMINI_API_KEY: Optional[str] = None
+    GEMINI_VISION_MODEL: str = "gemini-2.5-flash"
+    OLLAMA_URL: Optional[str] = None
+    OLLAMA_VISION_MODEL: str = "llava"
     
     # Redis Cache, Token Map & Distributed Rate Limiting (pylimitx)
     REDIS_URL: str = "redis://redis:6379/0"

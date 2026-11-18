@@ -20,13 +20,20 @@ interface SettingsViewProps {
   currentUser?: UserProfile | null;
   onUpdateFullName?: (newName: string) => void;
   onLogout?: () => void;
+  usedBytes?: number;
+  quotaBytes?: number;
 }
 
 export const SettingsView: React.FC<SettingsViewProps> = ({
   currentUser,
   onUpdateFullName,
   onLogout,
+  usedBytes = 0,
+  quotaBytes = 500 * 1024 * 1024,
 }) => {
+  const usedMb = (usedBytes / (1024 * 1024)).toFixed(2);
+  const quotaMb = Math.round(quotaBytes / (1024 * 1024));
+  const usedPercent = Math.min(100, Math.max(usedBytes > 0 ? 1 : 0, Math.round((usedBytes / Math.max(1, quotaBytes)) * 100)));
   const [fullName, setFullName] = useState(
     currentUser?.fullName || currentUser?.name || "",
   );
@@ -63,10 +70,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               <Database className="w-3.5 h-3.5 text-stone-400 mr-1.5" /> s3
               storage
             </span>
-            <span className="text-[10px] text-stone-500">3.5 MB / 500 MB</span>
+            <span className="text-[10px] text-stone-500">{usedMb} MB / {quotaMb} MB</span>
           </div>
           <div className="w-full bg-orange-100/50 dark:bg-[#251A12] rounded-full h-1 overflow-hidden">
-            <div className="bg-emerald-500 h-1 rounded-full w-[2%]" />
+            <div className="bg-emerald-500 h-1 rounded-full transition-all" style={{ width: `${usedPercent}%` }} />
           </div>
           <p className="text-[9px] text-stone-400">
             AWS SSE-KMS per-user prefix isolation

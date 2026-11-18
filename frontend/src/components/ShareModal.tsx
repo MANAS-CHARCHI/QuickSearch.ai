@@ -32,11 +32,14 @@ export const ShareModal: React.FC<ShareModalProps> = ({
   const currentImageUrl =
     (doc.pages && doc.pages[activePageIdx]?.url) || doc.previewUrl || '';
 
+  const isImageDoc = doc.mimeType?.startsWith('image/');
+
   // Helper to fetch file object from preview URL
   const getShareableFile = async (): Promise<File | null> => {
     if (!currentImageUrl) return null;
     try {
-      const res = await fetch(currentImageUrl);
+      const res = await fetch(currentImageUrl, { credentials: 'include' });
+      if (!res.ok) return null;
       const blob = await res.blob();
       const isPdf = doc.mimeType?.includes('pdf');
       const ext = isPdf ? 'pdf' : blob.type.includes('png') ? 'png' : 'jpg';
@@ -122,33 +125,42 @@ export const ShareModal: React.FC<ShareModalProps> = ({
   const handleCopyImage = async () => {
     if (!currentImageUrl) return;
     try {
-      const res = await fetch(currentImageUrl);
+      const res = await fetch(currentImageUrl, { credentials: 'include' });
+      if (!res.ok) {
+        await handleCopyDetails();
+        return;
+      }
       const blob = await res.blob();
 
       // Modern ClipboardItem supports image/png
       if (blob.type.includes('png') || blob.type.includes('jpeg') || blob.type.includes('image')) {
         // Convert to PNG if needed for maximum OS clipboard compatibility
-        const canvas = document.createElement('canvas');
-        const img = new Image();
-        img.crossOrigin = 'anonymous';
-        img.src = currentImageUrl;
-        await new Promise((resolve) => {
-          img.onload = resolve;
-        });
-        canvas.width = img.naturalWidth || 600;
-        canvas.height = img.naturalHeight || 400;
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-          ctx.drawImage(img, 0, 0);
-          canvas.toBlob(async (pngBlob) => {
-            if (pngBlob) {
-              await navigator.clipboard.write([
-                new ClipboardItem({ 'image/png': pngBlob }),
-              ]);
-              setCopiedType('image');
-              setTimeout(() => setCopiedType(null), 2500);
-            }
-          }, 'image/png');
+        const objectUrl = URL.createObjectURL(blob);
+        try {
+          const canvas = document.createElement('canvas');
+          const img = new Image();
+          img.src = objectUrl;
+          await new Promise((resolve, reject) => {
+            img.onload = resolve;
+            img.onerror = reject;
+          });
+          canvas.width = img.naturalWidth || 600;
+          canvas.height = img.naturalHeight || 400;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.drawImage(img, 0, 0);
+            canvas.toBlob(async (pngBlob) => {
+              if (pngBlob) {
+                await navigator.clipboard.write([
+                  new ClipboardItem({ 'image/png': pngBlob }),
+                ]);
+                setCopiedType('image');
+                setTimeout(() => setCopiedType(null), 2500);
+              }
+            }, 'image/png');
+          }
+        } finally {
+          URL.revokeObjectURL(objectUrl);
         }
       } else {
         await handleCopyDetails();
@@ -198,7 +210,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({
 
         {/* Document Card Preview */}
         <div className="flex items-center space-x-3 p-3 bg-stone-50 dark:bg-[#140E0A] rounded-xl border border-stone-200/60 dark:border-stone-800">
-          {currentImageUrl ? (
+          {isImageDoc && currentImageUrl ? (
             <img
               src={currentImageUrl}
               alt={doc.name}

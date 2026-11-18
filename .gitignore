@@ -51,4 +51,5 @@ postgres_data/
 
 # Docker volume mounts / temp files
 docker_data/
+logs/
 tmp/

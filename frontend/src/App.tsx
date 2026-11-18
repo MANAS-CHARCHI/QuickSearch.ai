@@ -7,8 +7,20 @@ import { ActivityView } from './components/ActivityView';
 import { SettingsView } from './components/SettingsView';
 import { AuthView } from './components/AuthView';
 import { ShareModal } from './components/ShareModal';
-import { TabType, DocumentFile, ChatMessage, ActivityItem, StagedFile, UserProfile, StagedPage, DocumentPage } from './types';
-import { checkHealth, verifyAuthSession, apiLogout, getStoredUser, apiUpdateProfile } from './services/api';
+import { TabType, DocumentFile, ChatMessage, ActivityItem, StagedFile, UserProfile, StagedPage } from './types';
+import {
+  checkHealth,
+  verifyAuthSession,
+  apiLogout,
+  getStoredUser,
+  apiUpdateProfile,
+  apiListFiles,
+  apiUploadFile,
+  apiRenameFile,
+  apiDeleteFile,
+  apiDownloadFile,
+  apiGetActivityLogs,
+} from './services/api';
 import { X, FileText, Download, ChevronLeft, ChevronRight, Layers, Share2 } from 'lucide-react';
 
 export function App() {
@@ -147,106 +159,61 @@ export function App() {
     pgvector: 'connected',
   });
 
-  const [documents, setDocuments] = useState<DocumentFile[]>([
-    {
-      id: 'doc-1',
-      name: 'aadhaar_card_national_id.pdf',
-      originalName: 'aadhaar_card_front_and_back.pdf',
-      size: 1.8 * 1024 * 1024,
-      mimeType: 'application/pdf',
-      uploadedAt: '2026-11-15T10:30:00Z',
-      status: 'indexed',
-      documentType: 'Aadhaar Card (Front & Back)',
-      category: 'Identity',
-      description: 'UIDAI biometric identity card bundle (Front: 12-digit UID & DOB; Back: Permanent Address & Father Name)',
-      isPii: true,
-      previewUrl: '/samples/aadhaar-preview.svg',
-      thumbnailUrl: '/samples/aadhaar-preview.svg',
-      pageCount: 2,
-      pages: [
-        { pageNumber: 1, url: '/samples/aadhaar-preview.svg', name: 'Front (Identity & UID)', size: 0.9 * 1024 * 1024 },
-        { pageNumber: 2, url: '/samples/aadhaar-preview.svg', name: 'Back (Address & Care of)', size: 0.9 * 1024 * 1024 },
-      ],
-    },
-    {
-      id: 'doc-2',
-      name: 'passport_scan.jpg',
-      originalName: 'passport_scan.jpg',
-      size: 2.1 * 1024 * 1024,
-      mimeType: 'image/jpeg',
-      uploadedAt: '2026-11-15T11:15:00Z',
-      status: 'indexed',
-      documentType: 'Passport',
-      category: 'Identity',
-      description: 'Republic of India passport bio-page with document number and expiry date',
-      isPii: true,
-      previewUrl: '/samples/passport-preview.svg',
-      thumbnailUrl: '/samples/passport-preview.svg',
-    },
-    {
-      id: 'doc-3',
-      name: 'medical_report_apollo.pdf',
-      originalName: 'blood_panel_lab_results.pdf',
-      size: 0.8 * 1024 * 1024,
-      mimeType: 'application/pdf',
-      uploadedAt: '2026-11-15T14:20:00Z',
-      status: 'indexed',
-      documentType: 'Medical Lab Report',
-      category: 'Medical',
-      description: 'Apollo Diagnostics comprehensive pathology panel with Hb, glucose & lipid levels',
-      isPii: true,
-      previewUrl: '/samples/medical-report-preview.svg',
-      thumbnailUrl: '/samples/medical-report-preview.svg',
-    },
-    {
-      id: 'doc-4',
-      name: 'annual_tax_return_form16.pdf',
-      originalName: 'ITR_acknowledgement_2026.pdf',
-      size: 1.1 * 1024 * 1024,
-      mimeType: 'application/pdf',
-      uploadedAt: '2026-11-15T16:45:00Z',
-      status: 'indexed',
-      documentType: 'Tax Statement',
-      category: 'Financial',
-      description: 'Annual salary statement, gross income, deductions (80C/D), and refund details',
-      isPii: true,
-      previewUrl: '/samples/tax-summary-preview.svg',
-      thumbnailUrl: '/samples/tax-summary-preview.svg',
-    },
-  ]);
-
-  const [activities, setActivities] = useState<ActivityItem[]>([
-    {
-      id: 'act-1',
-      action: 'File Scanned & Indexed',
-      target: 'aadhaar_card_front.pdf',
-      timestamp: '2026-11-15T10:30:00Z',
-      status: 'success',
-    },
-    {
-      id: 'act-2',
-      action: 'PII Detection & Masking',
-      target: 'Presidio masked 1 UIDAI entity before vector storage',
-      timestamp: '2026-11-15T10:30:02Z',
-      status: 'info',
-    },
-    {
-      id: 'act-3',
-      action: 'Document Uploaded',
-      target: 'passport_scan.jpg',
-      timestamp: '2026-11-15T11:15:00Z',
-      status: 'success',
-    },
-  ]);
+  const [documents, setDocuments] = useState<DocumentFile[]>([]);
+  const [activities, setActivities] = useState<ActivityItem[]>([]);
+  const [storageUsage, setStorageUsage] = useState<{ usedBytes: number; quotaBytes: number }>({
+    usedBytes: 0,
+    quotaBytes: 500 * 1024 * 1024,
+  });
 
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: 'msg-1',
       sender: 'assistant',
-      text: 'Vault City ready. Ask anything about your uploaded documents, like your passport expiry, Aadhaar number, or medical reports.',
+      text: 'Vault City ready. Upload your personal documents in the Upload tab to scan, encrypt, and index them for private semantic search.',
       timestamp: new Date().toISOString(),
     },
   ]);
+
+  // Fetch real files & audit logs from PostgreSQL/S3 whenever user signs in
+  const refreshVaultData = async () => {
+    try {
+      const [vaultData, logs] = await Promise.all([
+        apiListFiles(),
+        apiGetActivityLogs(50),
+      ]);
+      setDocuments(vaultData.files);
+      setStorageUsage({
+        usedBytes: vaultData.usedBytes,
+        quotaBytes: vaultData.quotaBytes,
+      });
+      setActivities(logs);
+    } catch (err) {
+      console.warn('Failed to load vault data:', err);
+    }
+  };
+
+  useEffect(() => {
+    if (currentUser) {
+      refreshVaultData();
+    } else {
+      setDocuments([]);
+      setActivities([]);
+      setStorageUsage({ usedBytes: 0, quotaBytes: 500 * 1024 * 1024 });
+    }
+  }, [currentUser?.id]);
+
+  // Poll automatically every 2s while any file is scanning or classifying
+  const hasPendingScan = documents.some(
+    (doc) => doc.status === 'scanning' || doc.status === 'classifying'
+  );
+  useEffect(() => {
+    if (!currentUser || !hasPendingScan) return;
+    const timer = setInterval(() => {
+      refreshVaultData();
+    }, 2000);
+    return () => clearInterval(timer);
+  }, [currentUser?.id, hasPendingScan]);
 
   const [isLoading, setIsLoading] = useState(false);
 
@@ -301,8 +268,8 @@ export function App() {
     return () => clearTimeout(timer);
   }, [transitionStage, displayedTab]);
 
-  // Upload confirmation handler with custom file naming & multi-page bundling
-  const handleConfirmUpload = (
+  // Real API upload handler: Quarantine S3 -> ClamAV & ML Scan -> Promote to Secured S3 & pgvector
+  const handleConfirmUpload = async (
     files: {
       file: File;
       finalName: string;
@@ -310,111 +277,74 @@ export function App() {
       pages?: StagedPage[];
     }[]
   ) => {
-    const newDocs: DocumentFile[] = files.map((item, idx) => {
-      const isImg = item.file.type.startsWith('image/');
-      const hasPages = item.pages && item.pages.length > 0;
-      const isMultiPage = item.pages && item.pages.length > 1;
+    const uploadedDocs: DocumentFile[] = [];
+    const errors: string[] = [];
 
-      let docPages: DocumentPage[] | undefined = undefined;
-      let primaryUrl: string | undefined = undefined;
+    for (const item of files) {
+      // If user bundled multiple image pages, upload each page cleanly or primary file
+      const filesToSend =
+        item.pages && item.pages.length > 1
+          ? item.pages.map((p, idx) => ({
+              file: p.file,
+              customName: `${item.finalName.replace(/\.[^/.]+$/, '')}_p${idx + 1}`,
+              category: item.category,
+            }))
+          : [{ file: item.file, customName: item.finalName, category: item.category }];
 
-      if (hasPages && item.pages) {
-        docPages = item.pages.map((p, pIdx) => {
-          const url = p.previewUrl || URL.createObjectURL(p.file);
-          if (pIdx === 0) primaryUrl = url;
-          return {
-            pageNumber: pIdx + 1,
-            url,
-            name: p.name || (pIdx === 0 ? 'Page 1 (Front)' : pIdx === 1 ? 'Page 2 (Back)' : `Page ${pIdx + 1}`),
-            size: p.file.size,
-          };
-        });
-      } else if (isImg) {
-        primaryUrl = URL.createObjectURL(item.file);
-      }
-
-      const totalSize = hasPages && item.pages
-        ? item.pages.reduce((acc, p) => acc + p.file.size, 0)
-        : item.file.size;
-
-      return {
-        id: `doc-${Date.now()}-${idx}`,
-        name: item.finalName,
-        originalName: item.file.name,
-        size: totalSize,
-        mimeType: isMultiPage ? 'application/pdf' : (item.file.type || 'application/octet-stream'),
-        uploadedAt: new Date().toISOString(),
-        status: 'indexed',
-        category: item.category,
-        documentType: isMultiPage
-          ? `${item.category} Document (${item.pages?.length} Pages)`
-          : (item.category === 'Identity' ? 'Identity Document' : 'Verified File'),
-        description: isMultiPage
-          ? `Encrypted multi-page document bundle (${item.pages?.length} pages: Front & Back) ready for semantic AI search.`
-          : `Encrypted vault file (${item.finalName}) ready for semantic AI search.`,
-        isPii: item.category === 'Identity',
-        previewUrl: primaryUrl,
-        thumbnailUrl: primaryUrl,
-        pages: docPages,
-        pageCount: docPages ? docPages.length : 1,
-      };
-    });
-
-    setDocuments((prev) => [...newDocs, ...prev]);
-
-    setActivities((prev) => [
-      {
-        id: `act-${Date.now()}`,
-        action: 'Files Uploaded & Encrypted',
-        target: `${files.length} document record(s) saved to vault`,
-        timestamp: new Date().toISOString(),
-        status: 'success',
-      },
-      ...prev,
-    ]);
-
-    // Switch to Vault view with smooth section transition
-    handleTabChange('vault');
-  };
-
-  // Document Rename Handler
-  const handleRenameDocument = (id: string, newName: string) => {
-    setDocuments((prev) =>
-      prev.map((doc) => {
-        if (doc.id === id) {
-          return { ...doc, name: newName };
+      for (const target of filesToSend) {
+        try {
+          const uploaded = await apiUploadFile({
+            file: target.file,
+            customName: target.customName,
+            category: target.category,
+          });
+          uploadedDocs.push(uploaded);
+        } catch (err: any) {
+          errors.push(`${target.customName}: ${err?.message || 'Upload failed'}`);
         }
-        return doc;
-      })
-    );
+      }
+    }
 
-    setActivities((prev) => [
-      {
-        id: `act-${Date.now()}`,
-        action: 'Document Renamed',
-        target: `Renamed to "${newName}"`,
-        timestamp: new Date().toISOString(),
-        status: 'info',
-      },
-      ...prev,
-    ]);
+    if (uploadedDocs.length > 0) {
+      setDocuments((prev) => [...uploadedDocs, ...prev]);
+      await refreshVaultData();
+      handleTabChange('vault');
+    }
+
+    if (errors.length > 0) {
+      throw new Error(errors.join(' | '));
+    }
   };
 
-  const handleDeleteDocument = (id: string) => {
-    const docToDelete = documents.find((d) => d.id === id);
-    setDocuments((prev) => prev.filter((doc) => doc.id !== id));
+  // Real API Document Rename Handler
+  const handleRenameDocument = async (id: string, newName: string) => {
+    try {
+      const updated = await apiRenameFile(id, newName);
+      setDocuments((prev) => prev.map((doc) => (doc.id === id ? updated : doc)));
+      await refreshVaultData();
+    } catch (err) {
+      console.error('Rename failed:', err);
+    }
+  };
 
-    if (docToDelete) {
-      setActivities((prev) => [
-        {
-          id: `act-${Date.now()}`,
-          action: 'File Deleted',
-          target: docToDelete.name,
-          timestamp: new Date().toISOString(),
-          status: 'warning',
-        },
-        ...prev,
-      ]);
+  // Real API Document Delete Handler (removes S3 object, pgvector chunks, and DB row)
+  const handleDeleteDocument = async (id: string) => {
+    try {
+      await apiDeleteFile(id);
+      setDocuments((prev) => prev.filter((doc) => doc.id !== id));
+      if (previewDoc?.id === id) setPreviewDoc(null);
+      await refreshVaultData();
+    } catch (err) {
+      console.error('Delete failed:', err);
+    }
+  };
+
+  // Real API Document Download Handler (Secured S3)
+  const handleDownloadDocument = async (doc: DocumentFile) => {
+    try {
+      await apiDownloadFile(doc.id, doc.name);
+    } catch (err) {
+      console.error('Download failed:', err);
     }
   };
 
@@ -430,25 +360,28 @@ export function App() {
     setIsLoading(true);
 
     setTimeout(() => {
-      let reply = "I analyzed your secure documents.";
+      const indexedDocs = documents.filter((d) => d.status === 'indexed');
+      let reply = '';
       let sources: string[] = [];
 
-      const lower = query.toLowerCase();
-      if (lower.includes('aadhaar') || lower.includes('address')) {
-        reply = "From 'aadhaar_card_national_id.pdf':\n• [Page 1 (Front)]: UID Number is 9876 5432 1098, DOB: 14/08/1995.\n• [Page 2 (Back)]: Registered Address is #42, Koramangala 4th Block, Bengaluru, Karnataka 560034.";
-        sources = ['aadhaar_card_national_id.pdf [Page 1: Front]', 'aadhaar_card_national_id.pdf [Page 2: Back]'];
-      } else if (lower.includes('passport')) {
-        reply = "Your Passport Number is: Z1234567. Expiry Date: 24 Oct 2032. (Extracted from 'passport_scan.jpg')";
-        sources = ['passport_scan.jpg'];
-      } else if (lower.includes('blood') || lower.includes('sugar') || lower.includes('med') || lower.includes('cholesterol')) {
-        reply = "From 'medical_report_apollo.pdf': Fasting blood sugar is 92 mg/dL (Normal range: 70-100), Hemoglobin is 14.8 g/dL (Normal: 13-17), and Total Cholesterol is 185 mg/dL. Vitamin D3 is mildly low at 28.4 ng/mL.";
-        sources = ['medical_report_apollo.pdf'];
-      } else if (lower.includes('tax') || lower.includes('salary') || lower.includes('refund') || lower.includes('income')) {
-        reply = "From 'annual_tax_return_form16.pdf': Gross total income for AY 2026-27 is ₹24,50,000. Deductions under 80C/D totaled ₹3,50,000, and an income tax refund of ₹42,850 was credited to your bank.";
-        sources = ['annual_tax_return_form16.pdf'];
+      if (indexedDocs.length === 0) {
+        reply =
+          'Your vault has no indexed documents yet. Go to the Upload tab to upload, virus-scan, and index your files into pgvector first.';
       } else {
-        reply = `Retrieved matching information from your vault city documents for query: "${query}".`;
-        sources = ['aadhaar_card_front.pdf', 'passport_scan.jpg', 'medical_report_apollo.pdf'];
+        const q = query.toLowerCase();
+        const matches = indexedDocs.filter(
+          (d) =>
+            d.name.toLowerCase().includes(q) ||
+            (d.description && d.description.toLowerCase().includes(q)) ||
+            (d.category && d.category.toLowerCase().includes(q))
+        );
+        const topDocs = matches.length > 0 ? matches.slice(0, 3) : indexedDocs.slice(0, 3);
+        sources = topDocs.map((d) => d.name);
+        reply =
+          `Searched ${indexedDocs.length} verified document(s) in your vault:\n` +
+          topDocs
+            .map((d) => `• ${d.name} (${d.category || 'Other'}): ${d.description || 'Indexed in pgvector.'}`)
+            .join('\n');
       }
 
       const assistantMsg: ChatMessage = {
@@ -461,18 +394,7 @@ export function App() {
 
       setMessages((prev) => [...prev, assistantMsg]);
       setIsLoading(false);
-
-      setActivities((prev) => [
-        {
-          id: `act-${Date.now()}`,
-          action: 'AI Document Query',
-          target: 'Semantic RAG retrieval executed',
-          timestamp: new Date().toISOString(),
-          status: 'info',
-        },
-        ...prev,
-      ]);
-    }, 900);
+    }, 350);
   };
 
   // If not logged in, render the Auth View (Login, Sign In, Password Reset)
@@ -528,6 +450,8 @@ export function App() {
               }}
               onRenameDocument={handleRenameDocument}
               onShareDocument={(doc) => setSharingDoc(doc)}
+              onDownloadDocument={handleDownloadDocument}
+              onUploadClick={() => handleTabChange('upload')}
             />
           )}
 
@@ -552,6 +476,8 @@ export function App() {
               currentUser={currentUser}
               onUpdateFullName={handleUpdateFullName}
               onLogout={handleLogout}
+              usedBytes={storageUsage.usedBytes}
+              quotaBytes={storageUsage.quotaBytes}
             />
           )}
         </div>
@@ -632,13 +558,21 @@ export function App() {
               </div>
             )}
 
-            {/* Document Image View */}
-            {((previewDoc.pages && previewDoc.pages[activePageIdx]?.url) || previewDoc.previewUrl) ? (
+            {/* Document Preview (Image, PDF iframe, or Text/Doc summary) */}
+            {previewDoc.previewUrl && previewDoc.mimeType.startsWith('image/') ? (
               <div className="relative rounded-xl overflow-hidden border border-orange-200/60 dark:border-[#382A20] bg-[#FFFCF9] dark:bg-[#140E0A] p-1 flex items-center justify-center">
                 <img
                   src={(previewDoc.pages && previewDoc.pages[activePageIdx]?.url) || previewDoc.previewUrl}
                   alt={previewDoc.name}
-                  className="w-full max-h-72 object-contain rounded-lg shadow-sm"
+                  className="w-full max-h-80 object-contain rounded-lg shadow-sm"
+                />
+              </div>
+            ) : previewDoc.previewUrl && previewDoc.mimeType === 'application/pdf' ? (
+              <div className="relative rounded-xl overflow-hidden border border-orange-200/60 dark:border-[#382A20] bg-[#FFFCF9] dark:bg-[#140E0A]">
+                <iframe
+                  src={previewDoc.previewUrl}
+                  title={previewDoc.name}
+                  className="w-full h-80 rounded-lg border-0"
                 />
               </div>
             ) : (
@@ -646,7 +580,10 @@ export function App() {
                 <div className="w-10 h-10 mx-auto rounded-xl bg-white dark:bg-[#1C1510] flex items-center justify-center text-stone-700 dark:text-stone-300 border border-orange-200/60 dark:border-[#382A20]">
                   <FileText className="w-5 h-5" />
                 </div>
-                <p className="text-xs font-semibold text-stone-900 dark:text-stone-100">{previewDoc.documentType}</p>
+                <p className="text-xs font-semibold text-stone-900 dark:text-stone-100">{previewDoc.documentType || previewDoc.mimeType}</p>
+                {previewDoc.sha256 && (
+                  <p className="text-[10px] text-stone-400 font-mono truncate">SHA-256: {previewDoc.sha256.slice(0, 20)}...</p>
+                )}
               </div>
             )}
 
@@ -671,39 +608,111 @@ export function App() {
               </div>
             )}
 
-            {/* Metadata Info */}
-            <div className="space-y-1 text-xs">
+            {/* Summary, Extracted Text & Step-by-Step Security Scan Report */}
+            <div className="space-y-2 text-xs max-h-56 overflow-y-auto pr-0.5">
               {previewDoc.originalName && previewDoc.originalName !== previewDoc.name && (
                 <p className="text-[10px] text-stone-400">Original filename: {previewDoc.originalName}</p>
               )}
-              {previewDoc.description && (
-                <p className="text-[11px] text-stone-600 dark:text-stone-300 bg-stone-50 dark:bg-[#161820] p-2 rounded-lg border border-stone-100 dark:border-stone-800/80">
-                  {previewDoc.description}
-                </p>
+
+              {/* Summary Box */}
+              {(previewDoc.scanReport?.summary || previewDoc.description) && (
+                <div className="bg-orange-50/60 dark:bg-[#231912] p-2.5 rounded-lg border border-orange-200/70 dark:border-[#382A20] space-y-1">
+                  <div className="flex items-center justify-between text-[10px] font-mono">
+                    <span className="font-bold text-orange-700 dark:text-orange-400 uppercase tracking-wider">
+                      File / Image Summary
+                    </span>
+                    {previewDoc.scanReport?.vision_engine && (
+                      <span className="px-1.5 py-0.5 rounded bg-white/80 dark:bg-[#16100B] text-stone-500 dark:text-stone-400 border border-orange-200/60 dark:border-stone-700 text-[9px]">
+                        {previewDoc.scanReport.vision_engine}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-stone-700 dark:text-stone-200 font-sans leading-relaxed">
+                    {previewDoc.scanReport?.summary || previewDoc.description}
+                  </p>
+                </div>
+              )}
+
+              {/* Extracted OCR / Document Text Preview */}
+              {previewDoc.scanReport?.extracted_text_preview && (
+                <details className="bg-stone-50 dark:bg-[#140E0A] rounded-lg border border-stone-200/70 dark:border-stone-800 p-2">
+                  <summary className="cursor-pointer text-[10px] font-mono font-semibold text-stone-600 dark:text-stone-300 select-none">
+                    Extracted Text / OCR ({previewDoc.scanReport.extracted_text_preview.length} chars)
+                  </summary>
+                  <pre className="mt-1.5 text-[10px] text-stone-600 dark:text-stone-400 whitespace-pre-wrap font-mono max-h-28 overflow-y-auto">
+                    {previewDoc.scanReport.extracted_text_preview}
+                  </pre>
+                </details>
+              )}
+
+              {/* Step-by-Step Security Scan Report */}
+              {previewDoc.scanReport?.steps && previewDoc.scanReport.steps.length > 0 && (
+                <div className="bg-stone-50 dark:bg-[#140E0A] p-2.5 rounded-lg border border-stone-200/70 dark:border-stone-800 space-y-1.5">
+                  <div className="flex items-center justify-between text-[10px] font-mono">
+                    <span className="font-bold text-stone-700 dark:text-stone-200 uppercase tracking-wider">
+                      Security & Scan Pipeline
+                    </span>
+                    {typeof previewDoc.scanReport.total_duration_ms === 'number' && (
+                      <span className="text-stone-400">
+                        Total: {Math.round(previewDoc.scanReport.total_duration_ms)} ms
+                      </span>
+                    )}
+                  </div>
+                  <div className="space-y-1">
+                    {previewDoc.scanReport.steps.map((step, i) => (
+                      <div key={step.stage || i} className="flex items-start justify-between gap-2 text-[10px] font-mono">
+                        <div className="flex items-start gap-1.5 min-w-0">
+                          <span
+                            className={`mt-0.5 shrink-0 font-bold ${
+                              step.status === 'passed'
+                                ? 'text-emerald-600 dark:text-emerald-400'
+                                : 'text-rose-600 dark:text-rose-400'
+                            }`}
+                          >
+                            {step.status === 'passed' ? '✓' : '✗'}
+                          </span>
+                          <div className="min-w-0">
+                            <span className="font-semibold text-stone-800 dark:text-stone-200">{step.label}: </span>
+                            <span className="text-stone-500 dark:text-stone-400 break-words">{step.detail}</span>
+                          </div>
+                        </div>
+                        {typeof step.duration_ms === 'number' && step.duration_ms > 0 && (
+                          <span className="text-stone-400 shrink-0">{Math.round(step.duration_ms)}ms</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
               )}
             </div>
 
             <div className="flex items-center justify-between text-xs text-stone-500 dark:text-stone-400 pt-1 border-t border-stone-100 dark:border-stone-800">
               <span className="text-[11px]">Size: {(previewDoc.size / (1024 * 1024)).toFixed(2)} MB</span>
-              <div className="flex items-center space-x-2">
-                <button
-                  type="button"
-                  onClick={() => setSharingDoc(previewDoc)}
-                  className="flex items-center space-x-1.5 px-3 py-1.5 bg-stone-100 dark:bg-stone-800 hover:bg-stone-200 dark:hover:bg-stone-700 text-stone-700 dark:text-stone-200 border border-stone-200 dark:border-stone-700 rounded-lg text-xs font-semibold shadow-xs transition-colors cursor-pointer"
-                  title="Share document directly (WhatsApp, Mail, AirDrop)"
-                >
-                  <Share2 className="w-3.5 h-3.5 text-orange-600 dark:text-orange-400" />
-                  <span>Share</span>
-                </button>
-                <a
-                  href={(previewDoc.pages && previewDoc.pages[activePageIdx]?.url) || previewDoc.previewUrl || '#'}
-                  download={previewDoc.name}
-                  className="flex items-center space-x-1.5 px-3.5 py-1.5 bg-orange-600 hover:bg-orange-700 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors"
-                >
-                  <Download className="w-3 h-3" />
-                  <span>Download</span>
-                </a>
-              </div>
+              {previewDoc.status === 'indexed' ? (
+                <div className="flex items-center space-x-2">
+                  <button
+                    type="button"
+                    onClick={() => setSharingDoc(previewDoc)}
+                    className="flex items-center space-x-1.5 px-3 py-1.5 bg-stone-100 dark:bg-stone-800 hover:bg-stone-200 dark:hover:bg-stone-700 text-stone-700 dark:text-stone-200 border border-stone-200 dark:border-stone-700 rounded-lg text-xs font-semibold shadow-xs transition-colors cursor-pointer"
+                    title="Share document directly (WhatsApp, Mail, AirDrop)"
+                  >
+                    <Share2 className="w-3.5 h-3.5 text-orange-600 dark:text-orange-400" />
+                    <span>Share</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDownloadDocument(previewDoc)}
+                    className="flex items-center space-x-1.5 px-3.5 py-1.5 bg-orange-600 hover:bg-orange-700 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors cursor-pointer"
+                  >
+                    <Download className="w-3 h-3" />
+                    <span>Download</span>
+                  </button>
+                </div>
+              ) : (
+                <span className="text-[10px] font-mono text-rose-500">
+                  Access blocked ({previewDoc.scanStatus || previewDoc.status})
+                </span>
+              )}
             </div>
           </div>
         </div>

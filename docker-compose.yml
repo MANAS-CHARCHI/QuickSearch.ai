@@ -107,12 +107,22 @@ services:
       SAM_API_URL: ${SAM_API_URL:-http://host.docker.internal:3001}
       SAM_LAMBDA_ENDPOINT_URL: ${SAM_LAMBDA_ENDPOINT_URL:-http://host.docker.internal:3002}
       MINIO_ENDPOINT_URL: ${MINIO_ENDPOINT_URL:-http://minio:9000}
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-vault_minio_admin}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-vault_minio_secret}
       MINIO_BUCKET: ${MINIO_BUCKET:-vault-uploads}
+      S3_QUARANTINE_BUCKET: ${S3_QUARANTINE_BUCKET:-vault-quarantine}
+      S3_SECURED_BUCKET: ${S3_SECURED_BUCKET:-vault-secured}
+      CLAMAV_HOST: ${CLAMAV_HOST:-clamav}
+      CLAMAV_PORT: ${CLAMAV_PORT:-3310}
+      FILE_LOG_DIR: /app/logs
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     volumes:
       - ./backend:/app
+      - ./logs:/app/logs
     depends_on:
       db:
         condition: service_healthy

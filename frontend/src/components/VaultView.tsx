@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search, FileCode2, Download, Trash2, Eye, LayoutGrid, List, Edit2, Check, X, Share2 } from 'lucide-react';
+import { Search, FileCode2, Download, Trash2, Eye, LayoutGrid, List, Edit2, Check, X, Share2, Loader2, ShieldAlert, ShieldCheck } from 'lucide-react';
 import { DocumentFile } from '../types';
 
 interface VaultViewProps {
@@ -8,6 +8,8 @@ interface VaultViewProps {
   onPreviewDocument: (doc: DocumentFile) => void;
   onRenameDocument: (id: string, newName: string) => void;
   onShareDocument?: (doc: DocumentFile) => void;
+  onDownloadDocument?: (doc: DocumentFile) => void;
+  onUploadClick?: () => void;
 }
 
 export const VaultView: React.FC<VaultViewProps> = ({
@@ -16,6 +18,8 @@ export const VaultView: React.FC<VaultViewProps> = ({
   onPreviewDocument,
   onRenameDocument,
   onShareDocument,
+  onDownloadDocument,
+  onUploadClick,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
@@ -107,13 +111,30 @@ export const VaultView: React.FC<VaultViewProps> = ({
 
       {/* Document Grid / List without embedded images or colored borders */}
       {filteredDocs.length === 0 ? (
-        <div className="py-16 text-center border border-dashed border-orange-200/80 dark:border-[#2D2118] rounded-xl bg-white/40 dark:bg-[#1C1510]/40 font-mono">
-          <FileCode2 className="w-7 h-7 text-stone-300 dark:text-stone-600 mx-auto mb-2" />
-          <p className="text-xs text-stone-500 dark:text-stone-400">no files matching query</p>
+        <div className="py-16 text-center border border-dashed border-orange-200/80 dark:border-[#2D2118] rounded-xl bg-white/40 dark:bg-[#1C1510]/40 font-mono space-y-2.5">
+          <FileCode2 className="w-7 h-7 text-stone-300 dark:text-stone-600 mx-auto" />
+          <p className="text-xs text-stone-500 dark:text-stone-400">
+            {documents.length === 0
+              ? 'your vault is empty — upload your first file to scan & store securely'
+              : 'no files matching query'}
+          </p>
+          {documents.length === 0 && onUploadClick && (
+            <button
+              type="button"
+              onClick={onUploadClick}
+              className="px-3.5 py-1.5 bg-orange-600 hover:bg-orange-700 text-white dark:bg-orange-500 dark:hover:bg-orange-400 dark:text-stone-950 rounded-lg text-xs font-semibold transition-all cursor-pointer"
+            >
+              upload document
+            </button>
+          )}
         </div>
       ) : viewMode === 'grid' ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-          {filteredDocs.map((doc) => (
+          {filteredDocs.map((doc) => {
+            const isReady = doc.status === 'indexed';
+            const isScanning = doc.status === 'scanning' || doc.status === 'classifying';
+            const isBlocked = doc.status === 'failed';
+            return (
             <div
               key={doc.id}
               className="bg-white dark:bg-[#1C1510] border border-orange-200/80 dark:border-[#2D2118] hover:border-orange-300 dark:hover:border-[#4A382A] rounded-xl p-4 transition-all flex flex-col justify-between shadow-val hover:shadow-val-hover group"
@@ -131,11 +152,31 @@ export const VaultView: React.FC<VaultViewProps> = ({
                       </span>
                     )}
                   </div>
-                  {doc.isPii && (
-                    <span className="px-1.5 py-0.2 rounded bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/25 font-bold text-[9px] shrink-0">
-                      PII
-                    </span>
-                  )}
+                  <div className="flex items-center space-x-1 shrink-0">
+                    {isScanning && (
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-orange-500/10 text-orange-700 dark:text-orange-400 border border-orange-500/20 text-[9px] font-semibold">
+                        <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                        {doc.status}
+                      </span>
+                    )}
+                    {isBlocked && (
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-rose-500/10 text-rose-700 dark:text-rose-400 border border-rose-500/20 text-[9px] font-semibold">
+                        <ShieldAlert className="w-2.5 h-2.5" />
+                        {doc.scanStatus || 'blocked'}
+                      </span>
+                    )}
+                    {isReady && (
+                      <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20 text-[9px] font-semibold">
+                        <ShieldCheck className="w-2.5 h-2.5" />
+                        verified
+                      </span>
+                    )}
+                    {doc.isPii && isReady && (
+                      <span className="px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/25 font-bold text-[9px]">
+                        PII
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 {/* Name & Inline Rename */}
@@ -172,11 +213,35 @@ export const VaultView: React.FC<VaultViewProps> = ({
                   </p>
                 </div>
 
-                {/* Just Description as requested: "just the name , description is enaught" */}
+                {/* AI / OCR Summary shown directly with the file */}
                 {doc.description && (
                   <p className="mt-2.5 text-xs text-stone-600 dark:text-stone-300 leading-relaxed font-sans line-clamp-3 break-words">
                     {doc.description}
                   </p>
+                )}
+
+                {/* Compact Security & Scan Verification Badges */}
+                {doc.scanReport && isReady && (
+                  <div className="mt-2 flex flex-wrap items-center gap-1 font-mono text-[9px]">
+                    {doc.scanReport.av_engine && (
+                      <span className="px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20">
+                        {doc.scanReport.av_engine} ✓
+                      </span>
+                    )}
+                    <span className="px-1.5 py-0.5 rounded bg-sky-500/10 text-sky-700 dark:text-sky-400 border border-sky-500/20">
+                      SQLi/PI ✓
+                    </span>
+                    {typeof doc.scanReport.chunks_stored === 'number' && (
+                      <span className="px-1.5 py-0.5 rounded bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-300 border border-stone-200 dark:border-stone-700">
+                        {doc.scanReport.chunks_stored} vec
+                      </span>
+                    )}
+                    {typeof doc.scanReport.total_duration_ms === 'number' && (
+                      <span className="text-stone-400 ml-0.5">
+                        {Math.round(doc.scanReport.total_duration_ms)}ms
+                      </span>
+                    )}
+                  </div>
                 )}
               </div>
 
@@ -193,36 +258,41 @@ export const VaultView: React.FC<VaultViewProps> = ({
                     <Edit2 className="w-3 h-3" />
                   </button>
                   <button
-                    onClick={() => onPreviewDocument(doc)}
-                    title="Preview"
-                    className="p-1 rounded text-stone-400 hover:text-stone-900 dark:hover:text-white hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors"
+                    onClick={() => isReady && onPreviewDocument(doc)}
+                    disabled={!isReady}
+                    title={isReady ? 'Preview' : 'Available after security scan completes'}
+                    className="p-1 rounded text-stone-400 hover:text-stone-900 dark:hover:text-white hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
                   >
                     <Eye className="w-3 h-3" />
                   </button>
                   <button
-                    onClick={() => onShareDocument?.(doc)}
-                    title="Share directly (WhatsApp, Mail, AirDrop)"
-                    className="p-1 rounded text-stone-400 hover:text-orange-600 dark:hover:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-500/10 transition-colors"
+                    onClick={() => isReady && onShareDocument?.(doc)}
+                    disabled={!isReady}
+                    title={isReady ? 'Share directly (WhatsApp, Mail, AirDrop)' : 'Available after security scan completes'}
+                    className="p-1 rounded text-stone-400 hover:text-orange-600 dark:hover:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-500/10 transition-colors disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
                   >
                     <Share2 className="w-3 h-3" />
                   </button>
                   <button
-                    title="Download"
-                    className="p-1 rounded text-stone-400 hover:text-stone-900 dark:hover:text-white hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors"
+                    onClick={() => isReady && onDownloadDocument?.(doc)}
+                    disabled={!isReady}
+                    title={isReady ? 'Download from Secured S3' : 'Available after security scan completes'}
+                    className="p-1 rounded text-stone-400 hover:text-stone-900 dark:hover:text-white hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
                   >
                     <Download className="w-3 h-3" />
                   </button>
                   <button
                     onClick={() => onDeleteDocument(doc.id)}
                     title="Delete"
-                    className="p-1 rounded text-stone-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-colors"
+                    className="p-1 rounded text-stone-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-colors cursor-pointer"
                   >
                     <Trash2 className="w-3 h-3" />
                   </button>
                 </div>
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       ) : (
         /* List Mode */
@@ -283,16 +353,34 @@ export const VaultView: React.FC<VaultViewProps> = ({
                     PII
                   </span>
                 )}
-                <button onClick={() => startRename(doc)} className="p-1 text-stone-400 hover:text-stone-900 dark:hover:text-white" title="Rename">
+                <button onClick={() => startRename(doc)} className="p-1 text-stone-400 hover:text-stone-900 dark:hover:text-white cursor-pointer" title="Rename">
                   <Edit2 className="w-3 h-3" />
                 </button>
-                <button onClick={() => onPreviewDocument(doc)} className="p-1 text-stone-400 hover:text-stone-900 dark:hover:text-white" title="Preview">
+                <button
+                  onClick={() => doc.status === 'indexed' && onPreviewDocument(doc)}
+                  disabled={doc.status !== 'indexed'}
+                  className="p-1 text-stone-400 hover:text-stone-900 dark:hover:text-white disabled:opacity-30 cursor-pointer"
+                  title="Preview"
+                >
                   <Eye className="w-3 h-3" />
                 </button>
-                <button onClick={() => onShareDocument?.(doc)} className="p-1 text-stone-400 hover:text-orange-600 dark:hover:text-orange-400" title="Share directly (WhatsApp, Mail, AirDrop)">
+                <button
+                  onClick={() => doc.status === 'indexed' && onDownloadDocument?.(doc)}
+                  disabled={doc.status !== 'indexed'}
+                  className="p-1 text-stone-400 hover:text-stone-900 dark:hover:text-white disabled:opacity-30 cursor-pointer"
+                  title="Download"
+                >
+                  <Download className="w-3 h-3" />
+                </button>
+                <button
+                  onClick={() => doc.status === 'indexed' && onShareDocument?.(doc)}
+                  disabled={doc.status !== 'indexed'}
+                  className="p-1 text-stone-400 hover:text-orange-600 dark:hover:text-orange-400 disabled:opacity-30 cursor-pointer"
+                  title="Share directly"
+                >
                   <Share2 className="w-3 h-3" />
                 </button>
-                <button onClick={() => onDeleteDocument(doc.id)} className="p-1 text-stone-400 hover:text-rose-600" title="Delete">
+                <button onClick={() => onDeleteDocument(doc.id)} className="p-1 text-stone-400 hover:text-rose-600 cursor-pointer" title="Delete">
                   <Trash2 className="w-3 h-3" />
                 </button>
               </div>

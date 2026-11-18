@@ -9,7 +9,14 @@
  * - If 401 Unauthorized occurs, silently refreshes via POST /api/v1/auth/refresh (cookie-driven).
  * - If refresh fails, triggers forced logout immediately.
  */
-import { AuthTokens, AuthResponseData, UserProfile, UserSession } from '../types';
+import {
+  ActivityItem,
+  AuthResponseData,
+  AuthTokens,
+  DocumentFile,
+  UserProfile,
+  UserSession,
+} from '../types';
 
 const API_BASE = '/api/v1';
 
@@ -609,4 +616,138 @@ export async function checkHealth() {
   } catch (error) {
     return { status: 'error', checks: { error: String(error) } };
   }
+}
+
+// --- Real Vault Files & Activity API ---
+
+function mapApiFileToDocument(raw: any): DocumentFile {
+  const validCategories = ['Identity', 'Financial', 'Medical', 'Personal', 'Other'] as const;
+  const cat = validCategories.includes(raw.category) ? raw.category : 'Other';
+  const statusVal =
+    raw.status === 'scanning' || raw.status === 'classifying' || raw.status === 'indexed' || raw.status === 'failed'
+      ? raw.status
+      : 'indexed';
+
+  return {
+    id: raw.id,
+    name: raw.filename,
+    originalName: raw.original_filename,
+    size: Number(raw.file_size || 0),
+    mimeType: raw.mime_type || 'application/octet-stream',
+    uploadedAt: raw.created_at || new Date().toISOString(),
+    status: statusVal,
+    scanStatus: raw.scan_status,
+    documentType: raw.document_type || undefined,
+    category: cat,
+    description: raw.description || undefined,
+    scanReport: raw.scan_report || undefined,
+    isPii: Boolean(raw.is_pii),
+    s3Key: raw.s3_key || undefined,
+    sha256: raw.sha256_hash || undefined,
+    previewUrl: raw.preview_url || undefined,
+    thumbnailUrl: raw.preview_url || undefined,
+    downloadUrl: raw.download_url || undefined,
+    pageCount: Number(raw.page_count || 1),
+  };
+}
+
+/** Upload a single file to Quarantine S3 -> Scan -> Promote to Secured S3 & pgvector */
+export async function apiUploadFile(params: {
+  file: File;
+  customName?: string;
+  category?: string;
+}): Promise<DocumentFile> {
+  const formData = new FormData();
+  formData.append('file', params.file);
+  if (params.customName) {
+    formData.append('custom_name', params.customName);
+  }
+  if (params.category) {
+    formData.append('category', params.category);
+  }
+
+  const res = await apiFetch('/files/upload', {
+    method: 'POST',
+    body: formData,
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data.detail || `Failed to upload ${params.file.name}.`);
+  }
+
+  return mapApiFileToDocument(data);
+}
+
+/** Fetch all vault files and storage quota stats for the authenticated user */
+export async function apiListFiles(): Promise<{
+  files: DocumentFile[];
+  totalCount: number;
+  usedBytes: number;
+  quotaBytes: number;
+}> {
+  const res = await apiFetch('/files');
+  if (!res.ok) {
+    throw new Error('Failed to load vault files.');
+  }
+  const data = await res.json();
+  return {
+    files: Array.isArray(data.files) ? data.files.map(mapApiFileToDocument) : [],
+    totalCount: Number(data.total_count || 0),
+    usedBytes: Number(data.used_bytes || 0),
+    quotaBytes: Number(data.quota_bytes || 500 * 1024 * 1024),
+  };
+}
+
+/** Rename or update metadata of a stored vault file */
+export async function apiRenameFile(fileId: string, filename: string): Promise<DocumentFile> {
+  const res = await apiFetch(`/files/${fileId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ filename }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data.detail || 'Failed to rename file.');
+  }
+  return mapApiFileToDocument(data);
+}
+
+/** Permanently delete a file from S3, pgvector, and PostgreSQL */
+export async function apiDeleteFile(fileId: string): Promise<void> {
+  const res = await apiFetch(`/files/${fileId}`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.detail || 'Failed to delete file.');
+  }
+}
+
+/** Download a verified file from Secured S3 through authenticated session */
+export async function apiDownloadFile(fileId: string, filename: string): Promise<void> {
+  const res = await apiFetch(`/files/${fileId}/content?download=true`);
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.detail || 'Unable to download file.');
+  }
+  const blob = await res.blob();
+  const blobUrl = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = blobUrl;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
+}
+
+/** Fetch user's real security & file audit logs from PostgreSQL */
+export async function apiGetActivityLogs(limit = 50): Promise<ActivityItem[]> {
+  const res = await apiFetch(`/files/activity/logs?limit=${limit}`);
+  if (!res.ok) {
+    return [];
+  }
+  const data = await res.json();
+  return Array.isArray(data.activities) ? data.activities : [];
 }

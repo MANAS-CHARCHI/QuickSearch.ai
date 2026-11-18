@@ -25,13 +25,14 @@ interface UploadViewProps {
       category: StagedFile['category'];
       pages?: StagedPage[];
     }[]
-  ) => void;
+  ) => Promise<void> | void;
 }
 
 export const UploadView: React.FC<UploadViewProps> = ({ onConfirmUpload }) => {
   const [isDragging, setIsDragging] = useState(false);
   const [stagedFiles, setStagedFiles] = useState<StagedFile[]>([]);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
   const [targetDocIdForPage, setTargetDocIdForPage] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -53,8 +54,8 @@ export const UploadView: React.FC<UploadViewProps> = ({ onConfirmUpload }) => {
 
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
-        if (file.size > 10 * 1024 * 1024) {
-          setErrorMessage(`"${file.name}" exceeds the 10MB limit.`);
+        if (file.size > 25 * 1024 * 1024) {
+          setErrorMessage(`"${file.name}" exceeds the 25MB limit.`);
           continue;
         }
         addedSize += file.size;
@@ -98,9 +99,9 @@ export const UploadView: React.FC<UploadViewProps> = ({ onConfirmUpload }) => {
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
 
-      // 10MB limit
-      if (file.size > 10 * 1024 * 1024) {
-        setErrorMessage(`"${file.name}" exceeds the 10MB limit.`);
+      // 25MB limit
+      if (file.size > 25 * 1024 * 1024) {
+        setErrorMessage(`"${file.name}" exceeds the 25MB limit.`);
         continue;
       }
 
@@ -307,8 +308,10 @@ export const UploadView: React.FC<UploadViewProps> = ({ onConfirmUpload }) => {
     );
   };
 
-  const handleFinalSave = () => {
-    if (stagedFiles.length === 0) return;
+  const handleFinalSave = async () => {
+    if (stagedFiles.length === 0 || isUploading) return;
+    setErrorMessage(null);
+    setIsUploading(true);
 
     const payload = stagedFiles.map((item) => ({
       file: item.file,
@@ -317,8 +320,14 @@ export const UploadView: React.FC<UploadViewProps> = ({ onConfirmUpload }) => {
       pages: item.pages && item.pages.length > 1 ? item.pages : undefined,
     }));
 
-    onConfirmUpload(payload);
-    setStagedFiles([]);
+    try {
+      await onConfirmUpload(payload);
+      setStagedFiles([]);
+    } catch (err: any) {
+      setErrorMessage(err?.message || 'Upload failed. Please try again.');
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   const imageItemsCount = stagedFiles.filter((item) => item.pages && item.pages.length > 0).length;
@@ -694,11 +703,12 @@ export const UploadView: React.FC<UploadViewProps> = ({ onConfirmUpload }) => {
 
               <button
                 type="button"
+                disabled={isUploading}
                 onClick={handleFinalSave}
-                className="flex items-center space-x-1 px-3 py-1 rounded text-xs font-semibold bg-orange-600 hover:bg-orange-700 text-white dark:bg-orange-500 dark:hover:bg-orange-400 dark:text-stone-950 shadow-sm transition-all"
+                className="flex items-center space-x-1 px-3 py-1 rounded text-xs font-semibold bg-orange-600 hover:bg-orange-700 text-white dark:bg-orange-500 dark:hover:bg-orange-400 dark:text-stone-950 shadow-sm transition-all disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed"
               >
-                <CheckCircle className="w-3 h-3 text-emerald-500" />
-                <span>upload to vault</span>
+                <CheckCircle className="w-3 h-3 text-emerald-200 dark:text-stone-950" />
+                <span>{isUploading ? 'uploading to quarantine...' : 'upload & scan'}</span>
               </button>
             </div>
           </div>

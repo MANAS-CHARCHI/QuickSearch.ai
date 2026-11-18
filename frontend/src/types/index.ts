@@ -43,6 +43,29 @@ export interface DocumentPage {
   size?: number;
 }
 
+export interface ScanStep {
+  stage: string;
+  label: string;
+  status: 'passed' | 'blocked' | 'failed';
+  detail: string;
+  duration_ms?: number;
+}
+
+export interface ScanReport {
+  summary?: string;
+  extracted_text_preview?: string;
+  vision_engine?: string;
+  av_engine?: string;
+  av_status?: string;
+  av_threat?: string | null;
+  sqli_status?: string;
+  prompt_injection_status?: string;
+  sha256_verified?: boolean;
+  chunks_stored?: number;
+  total_duration_ms?: number;
+  steps?: ScanStep[];
+}
+
 export interface DocumentFile {
   id: string;
   name: string;
@@ -51,15 +74,18 @@ export interface DocumentFile {
   mimeType: string;
   uploadedAt: string;
   status: 'scanning' | 'classifying' | 'indexed' | 'failed';
+  scanStatus?: string;
   documentType?: string;
   category?: 'Identity' | 'Financial' | 'Medical' | 'Personal' | 'Other';
   description?: string;
+  scanReport?: ScanReport;
   isPii?: boolean;
   s3Key?: string;
   sha256?: string;
   extractedSnippet?: string;
   thumbnailUrl?: string;
   previewUrl?: string;
+  downloadUrl?: string;
   pages?: DocumentPage[];
   pageCount?: number;
 }
