@@ -11,6 +11,7 @@ import { TabType, DocumentFile, ChatMessage, ActivityItem, StagedFile, UserProfi
 import {
   checkHealth,
   verifyAuthSession,
+  apiRefreshToken,
   apiLogout,
   getStoredUser,
   apiUpdateProfile,
@@ -73,34 +74,40 @@ export function App() {
     await apiLogout();
   };
 
-  // 1. Strict Cold-Start Verification on App Mount
+  // 1. Cold-Start Verification on App Mount
   useEffect(() => {
     verifyAuthSession().then((user) => {
       if (!user) {
-        handleLogout();
+        if (!getStoredUser()) {
+          handleLogout();
+        }
       } else {
         setCurrentUser(user);
       }
     });
   }, []);
 
-  // 2. Periodic Authorization Polling & Tab Focus Guard ("check time to time user is authorized or not")
+  // 2. Proactive Early Token Refresh & Tab Focus / Wake-from-Sleep Guard
+  // Access tokens expire in 5 minutes (300s). We proactively refresh early at 3.5 minutes (210s)
+  // so the access token NEVER expires while user is active, completely eliminating 401 logouts.
+  // If the 7-day refresh token is valid, the user is NEVER logged out.
   useEffect(() => {
     if (!currentUser) return;
 
-    // Check authorization every 30 seconds
-    const interval = setInterval(async () => {
-      const verified = await verifyAuthSession();
-      if (!verified) {
-        handleLogout();
-      }
-    }, 30000);
+    // Proactively refresh access token every 3.5 minutes (210,000 ms) before 5-minute expiry
+    const refreshInterval = setInterval(async () => {
+      await apiRefreshToken();
+    }, 210000);
 
-    // Re-verify immediately whenever browser tab regains focus
-    const handleFocus = async () => {
-      const verified = await verifyAuthSession();
-      if (!verified) {
-        handleLogout();
+    // When tab regains focus or becomes visible (e.g. laptop wakes up from sleep),
+    // proactively ensure access token is fresh before any component queries backend.
+    const handleVisibilityOrFocus = async () => {
+      if (document.visibilityState === 'visible') {
+        const refreshed = await apiRefreshToken();
+        if (refreshed) {
+          const user = await verifyAuthSession();
+          if (user) setCurrentUser(user);
+        }
       }
     };
 
@@ -111,18 +118,20 @@ export function App() {
       }
     };
 
-    // Custom unauthorized event dispatched by API fetch interceptor
+    // Custom unauthorized event dispatched ONLY when refresh token itself is dead (7-day expiry)
     const handleUnauthorized = () => {
       handleLogout();
     };
 
-    window.addEventListener('focus', handleFocus);
+    window.addEventListener('focus', handleVisibilityOrFocus);
+    document.addEventListener('visibilitychange', handleVisibilityOrFocus);
     window.addEventListener('storage', handleStorageChange);
     window.addEventListener('vault:unauthorized', handleUnauthorized);
 
     return () => {
-      clearInterval(interval);
-      window.removeEventListener('focus', handleFocus);
+      clearInterval(refreshInterval);
+      window.removeEventListener('focus', handleVisibilityOrFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityOrFocus);
       window.removeEventListener('storage', handleStorageChange);
       window.removeEventListener('vault:unauthorized', handleUnauthorized);
     };

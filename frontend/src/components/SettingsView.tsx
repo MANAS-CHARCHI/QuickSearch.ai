@@ -7,7 +7,6 @@ import {
   Download,
   Trash2,
   KeyRound,
-  Terminal,
   Laptop,
   ShieldCheck,
   Sparkles,

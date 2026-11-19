@@ -126,44 +126,61 @@ let refreshPromise: Promise<boolean> | null = null;
  * Execute silent refresh against backend using the HttpOnly refresh token cookie.
  * Rotates both access_token and refresh_token directly in HttpOnly cookies.
  * Does NOT receive or persist any token in JavaScript storage.
+ * If refresh token is present and valid, user is NEVER logged out.
  */
-async function silentRefreshToken(): Promise<boolean> {
-  try {
-    const res = await fetch(`${API_BASE}/auth/refresh`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      credentials: 'include',
-    });
-
-    if (!res.ok) {
-      triggerForcedLogout('Refresh token rejected or expired');
-      return false;
-    }
-
-    const data: AuthResponseData = await res.json();
-    if (data.user) {
-      const user: UserProfile = {
-        id: data.user.id,
-        email: data.user.email,
-        name: data.user.username || data.user.email.split('@')[0],
-        fullName: data.user.username || data.user.email.split('@')[0],
-        username: data.user.username,
-        role: (data.user.role as 'user' | 'admin') || 'user',
-        hasGoogle: data.user.has_google,
-        hasPassword: data.user.has_password,
-      };
-      setAuthSession(undefined, user);
-    }
-
-    return true;
-  } catch (err) {
-    console.error('Silent refresh network failure:', err);
-    triggerForcedLogout('Network failure during session refresh');
-    return false;
+export async function apiRefreshToken(): Promise<boolean> {
+  if (refreshPromise) {
+    return refreshPromise;
   }
+
+  refreshPromise = (async () => {
+    try {
+      const res = await fetch(`${API_BASE}/auth/refresh`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+      });
+
+      if (!res.ok) {
+        // ONLY trigger forced logout if backend explicitly confirms refresh token is revoked/expired (401 or 403)
+        if (res.status === 401 || res.status === 403) {
+          triggerForcedLogout('Refresh token expired or revoked');
+        }
+        return false;
+      }
+
+      const data: AuthResponseData = await res.json();
+      if (data.user) {
+        const user: UserProfile = {
+          id: data.user.id,
+          email: data.user.email,
+          name: data.user.username || data.user.email.split('@')[0],
+          fullName: data.user.username || data.user.email.split('@')[0],
+          username: data.user.username,
+          role: (data.user.role as 'user' | 'admin') || 'user',
+          hasGoogle: data.user.has_google,
+          hasPassword: data.user.has_password,
+        };
+        setAuthSession(undefined, user);
+      }
+
+      return true;
+    } catch (err) {
+      console.warn('Silent refresh network glitch (will retry):', err);
+      // Do NOT log out on network hiccup — preserve user session and cookies
+      return false;
+    } finally {
+      refreshPromise = null;
+    }
+  })();
+
+  return refreshPromise;
 }
+
+// Internal compatibility alias
+const silentRefreshToken = apiRefreshToken;
 
 /**
  * Centralized fetch interceptor:
@@ -225,10 +242,21 @@ export async function apiFetch(
  */
 export async function verifyAuthSession(): Promise<UserProfile | null> {
   try {
-    const res = await apiFetch('/auth/me');
+    let res = await apiFetch('/auth/me');
+
+    // If 401 occurred and retry didn't resolve, explicitly try refreshing token
+    if (res.status === 401) {
+      const refreshed = await apiRefreshToken();
+      if (refreshed) {
+        res = await fetch(`${API_BASE}/auth/me`, { credentials: 'include' });
+      }
+    }
+
     if (!res.ok) {
-      // 401 handled in apiFetch with refresh; if still not ok, logout
-      triggerForcedLogout('Session verification failed');
+      // Only logout if explicitly 401/403 (unauthenticated)
+      if (res.status === 401 || res.status === 403) {
+        triggerForcedLogout('Session verification failed');
+      }
       return null;
     }
 
@@ -248,7 +276,7 @@ export async function verifyAuthSession(): Promise<UserProfile | null> {
     return user;
   } catch (e) {
     console.warn('verifyAuthSession network error:', e);
-    // If completely offline, fall back to cached user profile
+    // If completely offline or network glitch, fall back to cached user profile
     return getStoredUser();
   }
 }
