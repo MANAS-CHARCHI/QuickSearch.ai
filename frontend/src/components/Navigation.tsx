@@ -33,8 +33,8 @@ export const Navigation: React.FC<NavigationProps> = ({
 
   return (
     <>
-      {/* Top Vault City Navbar */}
-      <header className="sticky top-0 z-40 bg-[#FFFCF9]/85 dark:bg-[#140E0A]/85 backdrop-blur-md border-b border-orange-200/50 dark:border-[#2D2118] transition-colors">
+      {/* Top Vault City Navbar (Fixed) */}
+      <header className="fixed top-0 left-0 right-0 z-40 h-14 bg-[#FFFCF9]/90 dark:bg-[#140E0A]/90 backdrop-blur-md border-b border-orange-200/50 dark:border-[#2D2118] transition-colors">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
           {/* Vault City Brand (Val Town Bold Lowercase Style) */}
           <div className="flex items-center space-x-2.5">
@@ -101,26 +101,38 @@ export const Navigation: React.FC<NavigationProps> = ({
         </div>
       </header>
 
-      {/* Mobile Floating Bottom Dock (Fixed, Val Town style - No horizontal scrolling) */}
-      <nav className="md:hidden fixed bottom-3 left-4 right-4 z-40 bg-white/95 dark:bg-[#1C1510]/95 backdrop-blur-xl border border-orange-200/80 dark:border-[#2D2118] rounded-xl px-2 py-1.5 flex items-center justify-around shadow-xl">
-        {tabs.map((tab) => {
-          const Icon = tab.icon;
-          const isActive = currentTab === tab.id;
-          return (
-            <button
-              key={tab.id}
-              onClick={() => onSelectTab(tab.id)}
-              className={`flex flex-col items-center justify-center py-1 px-3 rounded-lg text-[10px] font-mono transition-all duration-150 cursor-pointer ${
-                isActive
-                  ? 'text-orange-600 dark:text-orange-400 font-bold bg-orange-500/10 dark:bg-orange-950/40'
-                  : 'text-stone-400 hover:text-stone-900 dark:hover:text-stone-200'
-              }`}
-            >
-              <Icon className="w-4 h-4 mb-0.5" />
-              <span>{tab.label}</span>
-            </button>
-          );
-        })}
+      {/* Mobile Bottom Navigation Bar (Standard Mobile Type) */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#FFFCF9]/95 dark:bg-[#140E0A]/95 backdrop-blur-xl border-t border-orange-200/80 dark:border-[#2D2118] shadow-lg pb-[env(safe-area-inset-bottom,0px)]">
+        <div className="grid grid-cols-5 h-14 w-full max-w-md mx-auto">
+          {tabs.map((tab) => {
+            const Icon = tab.icon;
+            const isActive = currentTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => onSelectTab(tab.id)}
+                className={`flex flex-col items-center justify-center h-full w-full py-1 px-0.5 transition-colors cursor-pointer select-none relative group ${
+                  isActive
+                    ? 'text-orange-600 dark:text-orange-400 font-semibold'
+                    : 'text-stone-400 dark:text-stone-500 hover:text-stone-700 dark:hover:text-stone-300 font-medium'
+                }`}
+              >
+                {isActive && (
+                  <span className="absolute top-0 inset-x-2 sm:inset-x-3 h-0.5 bg-orange-500 dark:bg-orange-400 rounded-full" />
+                )}
+                <Icon
+                  className={`w-4 h-4 sm:w-5 sm:h-5 transition-transform ${
+                    isActive ? 'scale-110 text-orange-600 dark:text-orange-400' : 'group-hover:scale-105'
+                  }`}
+                />
+                <span className="text-[10px] tracking-tight font-sans truncate max-w-full mt-1 leading-none">
+                  {tab.label}
+                </span>
+              </button>
+            );
+          })}
+        </div>
       </nav>
     </>
   );

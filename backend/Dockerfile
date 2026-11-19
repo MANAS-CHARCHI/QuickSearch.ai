@@ -12,7 +12,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq-dev \
     python3-dev \
     curl \
-    && rm -rf /var/lib/apt/lists/*
+    tesseract-ocr \
+    tesseract-ocr-eng \
+    && rm -rf /var/lib/apt/lists/* \
+    && curl -sSLf https://raw.githubusercontent.com/tesseract-ocr/tessdata_best/main/eng.traineddata -o /usr/share/tesseract-ocr/5/tessdata/eng.traineddata || true
+
+ENV TESSDATA_PREFIX=/usr/share/tesseract-ocr/5/tessdata
 
 RUN pip install --no-cache-dir uv
 

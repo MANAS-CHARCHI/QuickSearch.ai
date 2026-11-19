@@ -507,3 +507,60 @@ async def clear_email_otp_resend_count(email: str) -> None:
     except Exception as e:
         logger.warning("Redis clear_email_otp_resend_count error for email=%s: %s", email_key, e)
 
+
+# ---------------------------------------------------------------------------
+# Fast Redis Caching Layer for AI Tokens, User Settings, and Vault File Info
+# ---------------------------------------------------------------------------
+
+def make_user_tokens_cache_key(user_id: str) -> str:
+    return f"vault:cache:user_tokens:{user_id}"
+
+
+def make_user_settings_cache_key(user_id: str) -> str:
+    return f"vault:cache:user_settings:{user_id}"
+
+
+def make_user_files_cache_key(user_id: str) -> str:
+    return f"vault:cache:user_files:{user_id}"
+
+
+async def get_json_cache(key: str) -> Optional[Any]:
+    """Retrieve JSON-deserialized value from Redis cache (<1ms response)."""
+    client = await get_redis_client()
+    if not client:
+        return None
+    try:
+        val = await client.get(key)
+        if val is not None:
+            return json.loads(val)
+    except Exception as exc:
+        logger.warning("Redis get_json_cache failed for %s: %s", key, exc)
+    return None
+
+
+async def set_json_cache(key: str, data: Any, ttl_seconds: int = 300) -> bool:
+    """Store JSON-serialized value in Redis cache with strict TTL."""
+    client = await get_redis_client()
+    if not client:
+        return False
+    try:
+        serialized = json.dumps(data)
+        await client.set(key, serialized, ex=ttl_seconds)
+        return True
+    except Exception as exc:
+        logger.warning("Redis set_json_cache failed for %s: %s", key, exc)
+        return False
+
+
+async def delete_cache(key: str) -> bool:
+    """Evict a specific key from Redis cache."""
+    client = await get_redis_client()
+    if not client:
+        return False
+    try:
+        await client.delete(key)
+        return True
+    except Exception as exc:
+        logger.warning("Redis delete_cache failed for %s: %s", key, exc)
+        return False
+

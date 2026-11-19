@@ -10,7 +10,7 @@ Vault City Files API:
 """
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 import json
 import os
 from typing import Any, Dict, List, Optional
@@ -35,6 +35,12 @@ from app.core.config import settings
 from app.core.database import get_db
 from app.core.limiter import rate_limit
 from app.core.pipeline_logger import log_file_event
+from app.core.redis import (
+    delete_cache,
+    get_json_cache,
+    make_user_files_cache_key,
+    set_json_cache,
+)
 from app.core.security import get_current_active_user
 from app.models.audit_log import AuditLog
 from app.models.file import FileDocument
@@ -181,9 +187,10 @@ async def upload_file(
     )
     used_bytes = int(quota_res.scalar_one() or 0)
     if used_bytes + file_size > settings.USER_STORAGE_QUOTA_BYTES:
+        limit_mb = settings.USER_STORAGE_QUOTA_BYTES // (1024 * 1024)
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail="Storage quota exceeded (500 MB limit). Delete unused files to free space.",
+            detail=f"Storage quota exceeded ({limit_mb} MB limit). Delete unused files to free space.",
         )
 
     # Compute SHA-256 fingerprint & perform strict per-user deduplication
@@ -300,17 +307,26 @@ async def upload_file(
     await db.refresh(new_file)
 
     if sync:
-        await process_uploaded_file(file_id, current_user.id, quarantine_key)
+        outcome = await process_uploaded_file(file_id, current_user.id, quarantine_key)
+        if outcome and (outcome.get("status") == "infected" or outcome.get("auto_removed")):
+            threat = outcome.get("threat_name") or "malware"
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Security Alert: '{display_name}' was infected ({threat}) and has been automatically removed from your vault.",
+            )
         await db.refresh(new_file)
     else:
         background_tasks.add_task(process_uploaded_file, file_id, current_user.id, quarantine_key)
+
+    # Invalidate cached vault files list so user sees new file immediately
+    await delete_cache(make_user_files_cache_key(str(current_user.id)))
 
     return _serialize_file(new_file)
 
 
 @router.get(
     "",
-    summary="List all files owned by the authenticated user with storage stats",
+    summary="List all files owned by the authenticated user with storage stats & security alerts",
 )
 async def list_files(
     category: Optional[str] = Query(None),
@@ -318,6 +334,15 @@ async def list_files(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
 ):
+    uid_str = str(current_user.id)
+    use_cache = (not category or category == "All") and (not search or not search.strip())
+    cache_key = make_user_files_cache_key(uid_str)
+
+    if use_cache:
+        cached = await get_json_cache(cache_key)
+        if cached is not None:
+            return cached
+
     stmt = (
         select(FileDocument)
         .where(FileDocument.user_id == current_user.id)
@@ -341,27 +366,97 @@ async def list_files(
 
     used_bytes = sum(f.file_size for f in files if f.scan_status in ("scanning", "classifying", "indexed"))
 
-    return {
+    # Fetch recent security alerts (e.g. infected files purged within the last 24 hours)
+    alert_stmt = (
+        select(AuditLog)
+        .where(
+            AuditLog.user_id == current_user.id,
+            AuditLog.action == "file_infected_purged",
+            AuditLog.created_at >= datetime.utcnow() - timedelta(hours=24),
+        )
+        .order_by(desc(AuditLog.created_at))
+        .limit(10)
+    )
+    alert_res = await db.execute(alert_stmt)
+    alert_logs = alert_res.scalars().all()
+
+    security_alerts = []
+    for log in alert_logs:
+        details = log.details or {}
+        if details.get("dismissed") is True:
+            continue
+        fname = details.get("filename") or "Document"
+        threat = details.get("threat_name") or "Malware detected"
+        security_alerts.append({
+            "id": str(log.id),
+            "filename": fname,
+            "threat_name": threat,
+            "created_at": log.created_at.isoformat() if log.created_at else None,
+            "message": f"Security Alert: '{fname}' was infected ({threat}) and has been automatically removed from your vault.",
+        })
+
+    response_data = {
         "files": [_serialize_file(f) for f in files],
         "total_count": len(files),
         "used_bytes": used_bytes,
         "quota_bytes": settings.USER_STORAGE_QUOTA_BYTES,
+        "security_alerts": security_alerts,
     }
+    if use_cache:
+        await set_json_cache(cache_key, response_data, ttl_seconds=300)
+
+    return response_data
+
+
+@router.post(
+    "/alerts/{alert_id}/dismiss",
+    summary="Dismiss a security alert notification",
+)
+async def dismiss_security_alert(
+    alert_id: str,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db),
+):
+    aid = _parse_uuid_or_400(alert_id)
+    res = await db.execute(
+        select(AuditLog).where(
+            AuditLog.id == aid,
+            AuditLog.user_id == current_user.id,
+            AuditLog.action == "file_infected_purged",
+        )
+    )
+    log = res.scalar_one_or_none()
+    if log:
+        current_details = dict(log.details or {})
+        current_details["dismissed"] = True
+        log.details = current_details
+        await db.commit()
+        await delete_cache(make_user_files_cache_key(str(current_user.id)))
+    return {"status": "ok", "dismissed": True}
 
 
 @router.get(
     "/activity/logs",
-    summary="Fetch real audit & security activity logs for the authenticated user",
+    summary="Fetch paginated audit & security activity logs for the authenticated user",
 )
 async def get_activity_logs(
-    limit: int = Query(50, ge=1, le=200),
+    limit: int = Query(10, ge=1, le=100),
+    page: int = Query(1, ge=1),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
 ):
+    offset = (page - 1) * limit
+
+    # Count total activity logs in database
+    count_stmt = select(func.count(AuditLog.id)).where(AuditLog.user_id == current_user.id)
+    count_res = await db.execute(count_stmt)
+    total_count = int(count_res.scalar_one() or 0)
+
     stmt = (
         select(AuditLog)
         .where(AuditLog.user_id == current_user.id)
         .order_by(desc(AuditLog.created_at))
+        .offset(offset)
         .limit(limit)
     )
     res = await db.execute(stmt)
@@ -373,6 +468,7 @@ async def get_activity_logs(
         "file_indexed_pgvector": "Verified, Promoted & Indexed",
         "file_virus_blocked": "Malware Blocked by ClamAV",
         "file_infected": "Malware Blocked by ClamAV",
+        "file_infected_purged": "Infected File Removed",
         "file_blocked_sqli": "SQL Injection Blocked",
         "file_blocked_prompt_injection": "Prompt Injection Blocked",
         "file_blocked_sqli_and_prompt_injection": "Security Threat Blocked",
@@ -408,7 +504,13 @@ async def get_activity_logs(
             }
         )
 
-    return {"activities": items}
+    return {
+        "activities": items,
+        "total_count": total_count,
+        "page": page,
+        "limit": limit,
+        "has_more": (offset + len(items)) < total_count,
+    }
 
 
 @router.get(
@@ -538,6 +640,7 @@ async def update_file_metadata(
     )
     await db.commit()
     await db.refresh(file_doc)
+    await delete_cache(make_user_files_cache_key(str(current_user.id)))
     return _serialize_file(file_doc)
 
 
@@ -588,6 +691,7 @@ async def delete_file(
         )
     )
     await db.commit()
+    await delete_cache(make_user_files_cache_key(str(current_user.id)))
     log_file_event(
         "FILE_DELETED",
         "deleted",

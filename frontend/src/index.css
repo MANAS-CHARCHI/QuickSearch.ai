@@ -97,6 +97,19 @@
   }
 }
 
+@keyframes alertProgress {
+  0% {
+    width: 100%;
+  }
+  100% {
+    width: 0%;
+  }
+}
+
+.animate-alert-progress {
+  animation: alertProgress 5s linear forwards;
+}
+
 @keyframes sectionRun {
   0% {
     opacity: 0;

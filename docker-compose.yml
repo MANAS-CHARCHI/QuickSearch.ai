@@ -116,6 +116,8 @@ services:
       CLAMAV_PORT: ${CLAMAV_PORT:-3310}
       FILE_LOG_DIR: /app/logs
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-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}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-haiku-4-5-20251001}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:

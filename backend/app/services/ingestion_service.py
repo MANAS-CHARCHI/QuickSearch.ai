@@ -58,6 +58,11 @@ EICAR_SIGNATURE = (
     b"X5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*"
 )
 
+EICAR_PATTERN = re.compile(
+    r"X5O!P%@AP\[4\\?PZX54\(P\^\)7CC\)7\}\$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!\$H\+H\*|EICAR-STANDARD-ANTIVIRUS-TEST-FILE",
+    re.IGNORECASE,
+)
+
 INVISIBLE_CHARS_RE = re.compile(
     r"[\u200b-\u200f\u202a-\u202e\u2060-\u2064\ufeff\U000e0000-\U000e007f]"
 )
@@ -81,7 +86,13 @@ SQLI_PATTERNS: List[Tuple[str, re.Pattern]] = [
             re.IGNORECASE,
         ),
     ),
-    ("time_based_blind", re.compile(r"\b(?:PG_SLEEP|SLEEP|WAITFOR\s+DELAY|BENCHMARK)\s*\(", re.IGNORECASE)),
+    (
+        "time_based_blind",
+        re.compile(
+            r"\b(?:PG_SLEEP\s*\(\s*\d+(?:\.\d+)?\s*\)|SLEEP\s*\(\s*\d+(?:\.\d+)?\s*\)|BENCHMARK\s*\(\s*\d+\s*,|WAITFOR\s+DELAY\s+['\"]\d+)",
+            re.IGNORECASE,
+        ),
+    ),
     (
         "system_catalog_probe",
         re.compile(r"\b(?:INFORMATION_SCHEMA\.(?:TABLES|COLUMNS)|PG_CATALOG\.PG_TABLES|XP_CMDSHELL)\b", re.IGNORECASE),
@@ -267,6 +278,22 @@ def _inspect_text_security(raw_text: str) -> Tuple[str, Optional[str], Dict[str,
 
     scan_corpus = "\n".join([normalized, *decoded_b64])
 
+    # 1. Antivirus & Malware check on decompressed / extracted text
+    is_av_clean, av_status, threat_name, av_engine = _scan_clamav_sync(scan_corpus.encode("utf-8", errors="replace"))
+    eicar_hit = bool(EICAR_PATTERN.search(scan_corpus))
+    if not is_av_clean or eicar_hit:
+        threat = threat_name or "Eicar-Signature"
+        engine = av_engine if not is_av_clean else "eicar-content-gate"
+        details = {
+            "invisible_chars_stripped": invisible_count,
+            "decoded_base64_count": len(decoded_b64),
+            "malware_detected": threat,
+            "av_engine": engine,
+            "sqli_matches": [],
+            "prompt_injection_matches": [],
+        }
+        return normalized, "infected", details
+
     sqli_hits = [name for name, pat in SQLI_PATTERNS if pat.search(scan_corpus)]
     pi_hits = [name for name, pat in PROMPT_INJECTION_PATTERNS if pat.search(scan_corpus)]
 
@@ -423,6 +450,7 @@ async def _extract_and_summarize(
     data: bytes,
     filename: str,
     mime_type: str,
+    user_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Extract text/OCR and generate a real summary for images, PDFs (including scanned PDFs),
@@ -433,7 +461,7 @@ async def _extract_and_summarize(
 
     # 1. Image upload -> Vision / OCR summary engine
     if ext in {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tiff"} or mime.startswith("image/"):
-        v = await analyze_image(data, filename)
+        v = await analyze_image(data, filename, user_id=user_id)
         pages = [
             {
                 "page_number": 1,
@@ -462,8 +490,14 @@ async def _extract_and_summarize(
     category_hint: Optional[str] = None
     visible_text = full_text
 
-    # 2b. If PDF is scanned (no embedded text), extract first embedded image via pypdf and send to VLM!
-    if (ext == ".pdf" or mime == "application/pdf") and pages and pages[0].get("source_type") == "scanned_pdf":
+    # 2b. If PDF is scanned or has very short text (< 250 chars) but has embedded images,
+    # extract the embedded image and send to OCR / VLM!
+    is_scanned_or_short_pdf = (
+        (ext == ".pdf" or mime == "application/pdf")
+        and pages
+        and (pages[0].get("source_type") == "scanned_pdf" or len(full_text.strip()) < 250)
+    )
+    if is_scanned_or_short_pdf:
         try:
             def _extract_first_embedded_image() -> Optional[bytes]:
                 from pypdf import PdfReader
@@ -476,35 +510,44 @@ async def _extract_and_summarize(
 
             embedded_img = await asyncio.to_thread(_extract_first_embedded_image)
             if embedded_img:
-                v = await analyze_image(embedded_img, filename)
-                full_text = v.combined_text
+                v = await analyze_image(embedded_img, filename, user_id=user_id)
+                combined_full = (
+                    f"{v.combined_text}\n\n[Metadata / Header Text]: {full_text}"
+                    if full_text and "Scanned PDF document" not in full_text
+                    else v.combined_text
+                )
+                full_text = combined_full
                 visible_text = v.visible_text
                 summary = v.summary
                 engine = f"pypdf+{v.engine}"
                 category_hint = v.category_hint
-                pages = [{"page_number": 1, "text": v.combined_text, "source_type": "scanned_pdf_vlm"}]
+                pages = [{"page_number": 1, "text": combined_full, "source_type": "scanned_pdf_vlm"}]
                 return {
                     "full_text": full_text,
                     "summary": summary,
                     "visible_text": visible_text,
                     "pages": pages,
                     "page_count": page_count,
-                    "doc_type": f"Scanned PDF ({page_count} page{'s' if page_count != 1 else ''})",
+                    "doc_type": f"{v.document_type} (PDF)",
                     "category_hint": category_hint,
                     "engine": engine,
                 }
         except Exception as exc:
             logger.warning("Scanned PDF embedded-image VLM extraction failed for %s: %s", filename, exc)
 
-    summary = summarize_text_document(full_text, filename, doc_type, page_count)
+    summary_info = await summarize_text_document(full_text, filename, doc_type, page_count, user_id=user_id)
+    summary = summary_info["summary"]
+    resolved_doc_type = summary_info.get("doc_type") or doc_type
+    resolved_category = summary_info.get("category_hint") or category_hint
+    engine = f"{engine}+{summary_info.get('engine', 'haiku')}"
     return {
         "full_text": full_text,
         "summary": summary,
         "visible_text": visible_text,
         "pages": pages,
         "page_count": page_count,
-        "doc_type": doc_type,
-        "category_hint": category_hint,
+        "doc_type": resolved_doc_type,
+        "category_hint": resolved_category,
         "engine": engine,
     }
 
@@ -682,7 +725,14 @@ async def process_uploaded_file(
                 )
                 extracted = st1.get("extracted_text", "")
                 pages = st1.get("pages") or []
-                summary = summarize_text_document(extracted, fname, file_record.document_type or "Document", max(1, len(pages)))
+                summary_info = await summarize_text_document(
+                    extracted, fname, file_record.document_type or "Document", max(1, len(pages)), user_id=uid_str
+                )
+                summary = summary_info["summary"]
+                if summary_info.get("doc_type"):
+                    file_record.document_type = summary_info["doc_type"]
+                if summary_info.get("category_hint") and file_record.category == "Other":
+                    file_record.category = summary_info["category_hint"]
                 file_record.s3_key = secured_key
                 file_record.scan_status = "indexed"
                 file_record.page_count = max(1, len(pages))
@@ -716,40 +766,45 @@ async def process_uploaded_file(
                     "duration_ms": round(t_av, 1),
                 })
                 await s3_service.delete_from_quarantine(quarantine_key)
-                file_record.scan_status = av_status
-                file_record.description = f"Blocked by antivirus ({av_engine}): {threat_name or 'malware detected'}"
-                file_record.pages_json = json.dumps({
-                    "summary": file_record.description,
-                    "av_engine": av_engine,
-                    "av_status": av_status,
-                    "av_threat": threat_name,
-                    "sha256_verified": True,
-                    "chunks_stored": 0,
-                    "total_duration_ms": round((time.perf_counter() - pipeline_start) * 1000.0, 1),
-                    "steps": steps,
-                })
-                file_record.updated_at = datetime.utcnow()
+                await vector_service.delete_file_chunks(db=db, file_id=file_id, user_id=user_id)
+
+                threat_detected = threat_name or "Malware.Detected"
                 await _log_audit(
                     db,
                     user_id=user_id,
-                    action="file_virus_blocked",
+                    action="file_infected_purged",
                     file_id=file_id,
                     status_str="blocked",
-                    details={"threat_name": threat_name, "engine": av_engine, "sha256": actual_sha256},
+                    details={
+                        "filename": fname,
+                        "threat_name": threat_detected,
+                        "engine": av_engine,
+                        "sha256": actual_sha256,
+                        "auto_removed": True,
+                        "reason": f"Malware detected by {av_engine} ({threat_detected}); file automatically purged from vault.",
+                    },
                 )
+                await db.delete(file_record)
                 await db.commit()
+
                 log_file_event(
-                    "VIRUS_SCAN_CLAMAV",
+                    "VIRUS_PURGED",
                     "blocked",
-                    f"MALWARE DETECTED by {av_engine}: {threat_name} — purged from quarantine",
+                    f"MALWARE DETECTED by {av_engine}: {threat_detected} — file '{fname}' automatically removed from database and storage.",
                     file_id=fid_str,
                     user_id=uid_str,
                     filename=fname,
                     duration_ms=t_av,
-                    details={"av_engine": av_engine, "threat_name": threat_name, "sha256": actual_sha256},
+                    details={"av_engine": av_engine, "threat_name": threat_detected, "sha256": actual_sha256, "auto_removed": True},
                     level="WARNING",
                 )
-                return {"status": av_status, "threat_name": threat_name}
+                return {
+                    "status": "infected",
+                    "threat_name": threat_detected,
+                    "auto_removed": True,
+                    "filename": fname,
+                    "message": f"Security Alert: '{fname}' was infected with {threat_detected} and has been automatically removed from your vault.",
+                }
 
             steps.append({
                 "stage": "virus_scan",
@@ -776,7 +831,9 @@ async def process_uploaded_file(
 
             # Stage 3b - Vision / OCR / Document Extraction & Summary
             t_ext0 = time.perf_counter()
-            extracted_info = await _extract_and_summarize(raw_bytes, fname, file_record.mime_type)
+            extracted_info = await _extract_and_summarize(
+                raw_bytes, fname, file_record.mime_type, user_id=uid_str
+            )
             t_ext = (time.perf_counter() - t_ext0) * 1000.0
 
             full_text = extracted_info["full_text"]
@@ -821,21 +878,80 @@ async def process_uploaded_file(
             t_sec = (time.perf_counter() - t_sec0) * 1000.0
 
             if block_status is not None:
+                is_virus_block = (block_status == "infected")
+                stage_label = "Malware & Security Gate"
+                detail_msg = (
+                    f"Threat detected ({security_details.get('av_engine', 'clamav')}): {security_details.get('malware_detected', 'Eicar-Signature')}"
+                    if is_virus_block
+                    else f"Blocked ({block_status})"
+                )
+
                 steps.append({
                     "stage": "security_gate",
-                    "label": "SQLi & Prompt-Injection Gate",
+                    "label": stage_label,
                     "status": "blocked",
-                    "detail": f"Blocked ({block_status})",
+                    "detail": detail_msg,
                     "duration_ms": round(t_sec, 1),
                 })
                 await s3_service.delete_from_quarantine(quarantine_key)
+                await vector_service.delete_file_chunks(db=db, file_id=file_id, user_id=user_id)
+
+                if is_virus_block:
+                    threat_detected = security_details.get("malware_detected", "Malware.Detected")
+                    engine_used = security_details.get("av_engine", av_engine)
+
+                    # Record security audit log documenting infected file purge
+                    await _log_audit(
+                        db,
+                        user_id=user_id,
+                        action="file_infected_purged",
+                        file_id=file_id,
+                        status_str="blocked",
+                        details={
+                            "filename": fname,
+                            "threat_name": threat_detected,
+                            "engine": engine_used,
+                            "sha256": actual_sha256,
+                            "auto_removed": True,
+                            "reason": f"Malware detected in document content by {engine_used} ({threat_detected}); file automatically purged from vault.",
+                        },
+                    )
+
+                    # Permanently delete file record from PostgreSQL database so it does not remain in user vault
+                    await db.delete(file_record)
+                    await db.commit()
+                    from app.core.redis import delete_cache, make_user_files_cache_key
+                    await delete_cache(make_user_files_cache_key(uid_str))
+
+                    log_file_event(
+                        "MALWARE_PURGED",
+                        "blocked",
+                        f"INFECTED FILE PURGED ({engine_used}): {threat_detected} — file '{fname}' automatically removed from database and storage.",
+                        file_id=fid_str,
+                        user_id=uid_str,
+                        filename=fname,
+                        duration_ms=t_sec,
+                        details={**security_details, "auto_removed": True},
+                        level="WARNING",
+                    )
+                    return {
+                        "status": "infected",
+                        "threat_name": threat_detected,
+                        "auto_removed": True,
+                        "filename": fname,
+                        "details": security_details,
+                        "message": f"Security Alert: '{fname}' was infected with {threat_detected} and has been automatically removed from your vault.",
+                    }
+
                 file_record.scan_status = block_status
                 file_record.description = f"Blocked by content security scanner ({block_status})."
+
                 file_record.pages_json = json.dumps({
                     "summary": file_record.description,
                     "vision_engine": vision_engine,
-                    "av_engine": av_engine,
+                    "av_engine": security_details.get("av_engine", av_engine),
                     "av_status": "clean",
+                    "av_threat": None,
                     "sqli_status": "blocked" if security_details.get("sqli_matches") else "clean",
                     "prompt_injection_status": "blocked" if security_details.get("prompt_injection_matches") else "clean",
                     "sha256_verified": True,
@@ -850,7 +966,7 @@ async def process_uploaded_file(
                     action=f"file_{block_status}",
                     file_id=file_id,
                     status_str="blocked",
-                    details={"security": security_details, "sha256": actual_sha256},
+                    details={"threat_name": None, "security": security_details, "sha256": actual_sha256},
                 )
                 await db.commit()
                 log_file_event(
@@ -1011,11 +1127,12 @@ async def process_uploaded_file(
                 },
             )
             await db.commit()
+            from app.core.redis import delete_cache, make_user_files_cache_key
+            await delete_cache(make_user_files_cache_key(uid_str))
             log_file_event(
                 "PGVECTOR_INDEX",
                 "passed",
                 f"Stored {chunks_stored} vector chunk(s) in PostgreSQL pgvector",
-                file_id=fid_str,
                 user_id=uid_str,
                 filename=fname,
                 duration_ms=t_vec,
@@ -1060,6 +1177,8 @@ async def process_uploaded_file(
                 details={"error": str(exc)},
             )
             await db.commit()
+            from app.core.redis import delete_cache, make_user_files_cache_key
+            await delete_cache(make_user_files_cache_key(uid_str))
             log_file_event(
                 "PIPELINE_FAILED",
                 "error",

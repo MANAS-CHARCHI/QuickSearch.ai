@@ -139,3 +139,33 @@ export interface UserSession {
   expiresAt: string;
   isCurrent: boolean;
 }
+
+export interface SecurityAlert {
+  id: string;
+  filename: string;
+  threatName: string;
+  createdAt?: string;
+  message: string;
+}
+
+export interface ModelTokenUsage {
+  model: string;
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+  cost_usd: number;
+  cost_inr?: number;
+  request_count: number;
+  last_used_at: string;
+}
+
+export interface UserTokenSummary {
+  user_id: string;
+  total_input_tokens: number;
+  total_output_tokens: number;
+  total_tokens: number;
+  total_cost_usd: number;
+  total_cost_inr?: number;
+  total_requests: number;
+  breakdown_by_model: ModelTokenUsage[];
+}

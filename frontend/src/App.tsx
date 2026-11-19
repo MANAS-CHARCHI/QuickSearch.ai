@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Navigation } from './components/Navigation';
 import { VaultView } from './components/VaultView';
 import { UploadView } from './components/UploadView';
@@ -7,7 +7,7 @@ import { ActivityView } from './components/ActivityView';
 import { SettingsView } from './components/SettingsView';
 import { AuthView } from './components/AuthView';
 import { ShareModal } from './components/ShareModal';
-import { TabType, DocumentFile, ChatMessage, ActivityItem, StagedFile, UserProfile, StagedPage } from './types';
+import { TabType, DocumentFile, ChatMessage, ActivityItem, StagedFile, UserProfile, StagedPage, SecurityAlert } from './types';
 import {
   checkHealth,
   verifyAuthSession,
@@ -20,8 +20,10 @@ import {
   apiDeleteFile,
   apiDownloadFile,
   apiGetActivityLogs,
+  apiDismissSecurityAlert,
+  apiSendChatMessage,
 } from './services/api';
-import { X, FileText, Download, ChevronLeft, ChevronRight, Layers, Share2 } from 'lucide-react';
+import { X, FileText, Download, ChevronLeft, ChevronRight, Layers, Share2, ShieldAlert } from 'lucide-react';
 
 export function App() {
   // Requirement: AI Assistant chatbot is the default active view on start
@@ -160,10 +162,34 @@ export function App() {
   });
 
   const [documents, setDocuments] = useState<DocumentFile[]>([]);
-  const [activities, setActivities] = useState<ActivityItem[]>([]);
+  // User Device Cache (Browser LocalStorage) for instant 0ms activity loading
+  const [activities, setActivities] = useState<ActivityItem[]>(() => {
+    const user = getStoredUser();
+    if (user?.id) {
+      try {
+        const cached = localStorage.getItem('vault_activities_cache_' + user.id);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+      } catch (e) {}
+    }
+    return [];
+  });
+  const [activitiesPagination, setActivitiesPagination] = useState<{
+    page: number;
+    hasMore: boolean;
+    totalCount: number;
+    isLoadingMore: boolean;
+  }>({
+    page: 1,
+    hasMore: false,
+    totalCount: 0,
+    isLoadingMore: false,
+  });
   const [storageUsage, setStorageUsage] = useState<{ usedBytes: number; quotaBytes: number }>({
     usedBytes: 0,
-    quotaBytes: 500 * 1024 * 1024,
+    quotaBytes: 100 * 1024 * 1024,
   });
 
   const [messages, setMessages] = useState<ChatMessage[]>([
@@ -175,31 +201,118 @@ export function App() {
     },
   ]);
 
-  // Fetch real files & audit logs from PostgreSQL/S3 whenever user signs in
+  const [securityAlerts, setSecurityAlerts] = useState<SecurityAlert[]>([]);
+  const dismissedAlertIdsRef = useRef<Set<string>>(new Set());
+
+  const handleDismissAlert = useCallback((alertId: string) => {
+    dismissedAlertIdsRef.current.add(alertId);
+    setSecurityAlerts((prev) => prev.filter((a) => a.id !== alertId));
+    apiDismissSecurityAlert(alertId);
+  }, []);
+
+  // Notification is automatically removed after 5 seconds or when user manually dismisses it
+  useEffect(() => {
+    if (securityAlerts.length === 0) return;
+
+    const timers = securityAlerts.map((alert) =>
+      setTimeout(() => {
+        handleDismissAlert(alert.id);
+      }, 5000)
+    );
+
+    return () => {
+      timers.forEach((t) => clearTimeout(t));
+    };
+  }, [securityAlerts, handleDismissAlert]);
+
+  // Fetch real files, alerts & audit logs from PostgreSQL/Redis/S3 whenever user signs in
   const refreshVaultData = async () => {
     try {
-      const [vaultData, logs] = await Promise.all([
+      const [vaultData, logsData] = await Promise.all([
         apiListFiles(),
-        apiGetActivityLogs(50),
+        apiGetActivityLogs(1, 10),
       ]);
       setDocuments(vaultData.files);
       setStorageUsage({
         usedBytes: vaultData.usedBytes,
         quotaBytes: vaultData.quotaBytes,
       });
-      setActivities(logs);
+      setActivities(logsData.activities);
+      setActivitiesPagination({
+        page: 1,
+        hasMore: logsData.hasMore,
+        totalCount: logsData.totalCount,
+        isLoadingMore: false,
+      });
+
+      // Cache the last 10 activities on user's device (browser cache)
+      if (currentUser?.id && logsData.activities.length > 0) {
+        try {
+          localStorage.setItem(
+            'vault_activities_cache_' + currentUser.id,
+            JSON.stringify(logsData.activities.slice(0, 10))
+          );
+        } catch (e) {}
+      }
+
+      if (vaultData.securityAlerts) {
+        const incomingAlerts = vaultData.securityAlerts.filter(
+          (a) => !dismissedAlertIdsRef.current.has(a.id)
+        );
+        // Only update state if IDs changed so we don't reset the 5-second auto-dismiss timer
+        setSecurityAlerts((prev) => {
+          const prevIds = prev.map((a) => a.id).sort().join(',');
+          const incomingIds = incomingAlerts.map((a) => a.id).sort().join(',');
+          if (prevIds === incomingIds) {
+            return prev;
+          }
+          return incomingAlerts;
+        });
+      }
     } catch (err) {
       console.warn('Failed to load vault data:', err);
     }
   };
 
+  const handleLoadMoreActivities = async () => {
+    if (activitiesPagination.isLoadingMore || !activitiesPagination.hasMore) return;
+    setActivitiesPagination((prev) => ({ ...prev, isLoadingMore: true }));
+    try {
+      const nextPage = activitiesPagination.page + 1;
+      const data = await apiGetActivityLogs(nextPage, 10);
+      setActivities((prev) => [...prev, ...data.activities]);
+      setActivitiesPagination({
+        page: nextPage,
+        hasMore: data.hasMore,
+        totalCount: data.totalCount,
+        isLoadingMore: false,
+      });
+    } catch (err) {
+      console.warn('Failed to load older activities from DB:', err);
+      setActivitiesPagination((prev) => ({ ...prev, isLoadingMore: false }));
+    }
+  };
+
   useEffect(() => {
     if (currentUser) {
+      // Immediate load from browser device cache on user switch
+      try {
+        const cached = localStorage.getItem('vault_activities_cache_' + currentUser.id);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setActivities(parsed);
+          }
+        }
+      } catch (e) {}
       refreshVaultData();
     } else {
       setDocuments([]);
       setActivities([]);
-      setStorageUsage({ usedBytes: 0, quotaBytes: 500 * 1024 * 1024 });
+      setSecurityAlerts([]);
+      dismissedAlertIdsRef.current.clear();
+      setStorageUsage({ usedBytes: 0, quotaBytes: 100 * 1024 * 1024 });
+      setActivitiesPagination({ page: 1, hasMore: false, totalCount: 0, isLoadingMore: false });
     }
   }, [currentUser?.id]);
 
@@ -348,7 +461,26 @@ export function App() {
     }
   };
 
-  const handleSendMessage = (query: string) => {
+  // Clickable Document Reference in Chat -> Opens In-Browser Preview Modal immediately
+  const handleOpenDocumentFromChat = (filename: string) => {
+    const clean = filename.replace(/^@va\//, '').trim().toLowerCase();
+    const matched = documents.find((doc) => {
+      const dName = doc.name.toLowerCase();
+      const oName = (doc.originalName || '').toLowerCase();
+      return (
+        dName === clean ||
+        oName === clean ||
+        dName.includes(clean) ||
+        clean.includes(dName)
+      );
+    });
+    if (matched) {
+      setPreviewDoc(matched);
+      setActivePageIdx(0);
+    }
+  };
+
+  const handleSendMessage = async (query: string) => {
     const userMsg: ChatMessage = {
       id: `user-${Date.now()}`,
       sender: 'user',
@@ -359,7 +491,18 @@ export function App() {
     setMessages((prev) => [...prev, userMsg]);
     setIsLoading(true);
 
-    setTimeout(() => {
+    try {
+      const res = await apiSendChatMessage(query);
+      const assistantMsg: ChatMessage = {
+        id: res.id || `asst-${Date.now()}`,
+        sender: 'assistant',
+        text: res.content,
+        timestamp: res.created_at || new Date().toISOString(),
+        sources: res.sources,
+      };
+      setMessages((prev) => [...prev, assistantMsg]);
+    } catch (err: any) {
+      // Fallback to local search if offline or network error
       const indexedDocs = documents.filter((d) => d.status === 'indexed');
       let reply = '';
       let sources: string[] = [];
@@ -391,10 +534,10 @@ export function App() {
         timestamp: new Date().toISOString(),
         sources,
       };
-
       setMessages((prev) => [...prev, assistantMsg]);
+    } finally {
       setIsLoading(false);
-    }, 350);
+    }
   };
 
   // If not logged in, render the Auth View (Login, Sign In, Password Reset)
@@ -409,7 +552,7 @@ export function App() {
   }
 
   return (
-    <div className="min-h-screen bg-[#FFFCF9] dark:bg-[#140E0A] bg-grid-pattern text-stone-900 dark:text-[#FAF5F0] flex flex-col font-sans transition-colors duration-200">
+    <div className="min-h-screen pt-14 pb-14 md:pb-0 bg-[#FFFCF9] dark:bg-[#140E0A] bg-grid-pattern text-stone-900 dark:text-[#FAF5F0] flex flex-col font-sans transition-colors duration-200">
       {/* Top Navbar & Mobile Bottom Tab Switcher */}
       <Navigation
         currentTab={currentTab}
@@ -425,10 +568,56 @@ export function App() {
       <main
         className={`flex-1 w-full max-w-5xl mx-auto transition-all ${
           displayedTab === 'chat'
-            ? 'p-0 sm:px-4 sm:py-5 md:py-6 sm:pb-8 h-[calc(100vh-3.5rem)] h-[calc(100dvh-3.5rem)] md:h-auto overflow-hidden md:overflow-visible flex flex-col'
-            : 'px-3 sm:px-4 py-4 sm:py-6 pb-36 md:pb-8 min-h-0'
+            ? 'p-0 md:px-4 md:py-5 md:py-6 md:pb-8 h-[calc(100vh-7rem)] h-[calc(100dvh-7rem)] md:h-auto overflow-hidden md:overflow-visible flex flex-col'
+            : 'px-3 sm:px-4 py-4 sm:py-6 pb-20 md:pb-8 min-h-0'
         }`}
       >
+        {/* Security Alerts Banner for Infected Files */}
+        {securityAlerts.length > 0 && (
+          <div className="mb-4 px-2 sm:px-0 space-y-2.5">
+            {securityAlerts.map((alert) => (
+              <div
+                key={alert.id}
+                role="alert"
+                className="relative flex items-start sm:items-center justify-between gap-3 p-3.5 rounded-xl border border-rose-500/35 bg-rose-500/10 dark:bg-rose-950/40 backdrop-blur-sm text-rose-900 dark:text-rose-100 shadow-sm transition-all"
+              >
+                <div className="flex items-start sm:items-center gap-3 min-w-0">
+                  <div className="p-2 rounded-lg bg-rose-500/20 text-rose-600 dark:text-rose-400 shrink-0 mt-0.5 sm:mt-0">
+                    <ShieldAlert className="w-5 h-5" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-semibold text-xs sm:text-sm text-rose-900 dark:text-rose-100">
+                        Security Alert: Infected File Removed
+                      </span>
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-rose-500/20 text-rose-700 dark:text-rose-300 border border-rose-500/30">
+                        {alert.threatName}
+                      </span>
+                    </div>
+                    <p className="text-xs text-rose-700 dark:text-rose-300 mt-0.5 break-words">
+                      <span className="font-mono font-medium">{alert.filename}</span> was detected as infected and has been automatically removed from your vault for security.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleDismissAlert(alert.id)}
+                  aria-label="Dismiss security alert"
+                  className="p-1 rounded-md text-rose-600 dark:text-rose-400 hover:text-rose-900 dark:hover:text-white hover:bg-rose-500/20 transition-colors shrink-0"
+                  title="Dismiss notification"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+
+                {/* 5-second auto-remove progress indicator */}
+                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-rose-500/15 overflow-hidden rounded-b-xl">
+                  <div className="h-full bg-rose-500/70 animate-alert-progress" />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
         <div
           className={`w-full ${
             displayedTab === 'chat' ? 'h-full flex-1 flex flex-col min-h-0 overflow-hidden' : ''
@@ -464,11 +653,18 @@ export function App() {
               messages={messages}
               onSendMessage={handleSendMessage}
               isLoading={isLoading}
+              onOpenDocument={handleOpenDocumentFromChat}
             />
           )}
 
           {displayedTab === 'activity' && (
-            <ActivityView activities={activities} />
+            <ActivityView
+              activities={activities}
+              hasMore={activitiesPagination.hasMore}
+              totalCount={activitiesPagination.totalCount}
+              isLoadingMore={activitiesPagination.isLoadingMore}
+              onLoadMore={handleLoadMoreActivities}
+            />
           )}
 
           {displayedTab === 'settings' && (

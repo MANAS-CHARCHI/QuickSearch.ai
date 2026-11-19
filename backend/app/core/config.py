@@ -25,12 +25,14 @@ class Settings(BaseSettings):
     CLAMAV_HOST: str = "clamav"
     CLAMAV_PORT: int = 3310
     MAX_UPLOAD_SIZE_BYTES: int = 25 * 1024 * 1024  # 25 MB
-    USER_STORAGE_QUOTA_BYTES: int = 500 * 1024 * 1024  # 500 MB
+    USER_STORAGE_QUOTA_BYTES: int = 100 * 1024 * 1024  # 100 MB free storage hard limit
 
     # Host-mounted File Pipeline Logs (persisted in ./logs on host + docker logs stdout)
     FILE_LOG_DIR: str = "/app/logs"
 
-    # Vision / Image Summary Engine (Gemini Vision -> Ollama VLM -> Built-in Tesseract OCR + Analyzer)
+    # Vision / Image Summary Engine (Anthropic Claude Haiku -> Gemini Vision -> Ollama VLM -> Built-in Tesseract OCR + Analyzer)
+    ANTHROPIC_API_KEY: Optional[str] = None
+    ANTHROPIC_MODEL: str = "claude-haiku-4-5-20251001"
     GEMINI_API_KEY: Optional[str] = None
     GEMINI_VISION_MODEL: str = "gemini-2.5-flash"
     OLLAMA_URL: Optional[str] = None

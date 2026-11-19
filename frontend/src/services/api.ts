@@ -14,6 +14,7 @@ import {
   AuthResponseData,
   AuthTokens,
   DocumentFile,
+  SecurityAlert,
   UserProfile,
   UserSession,
 } from '../types';
@@ -685,6 +686,7 @@ export async function apiListFiles(): Promise<{
   totalCount: number;
   usedBytes: number;
   quotaBytes: number;
+  securityAlerts: SecurityAlert[];
 }> {
   const res = await apiFetch('/files');
   if (!res.ok) {
@@ -695,8 +697,27 @@ export async function apiListFiles(): Promise<{
     files: Array.isArray(data.files) ? data.files.map(mapApiFileToDocument) : [],
     totalCount: Number(data.total_count || 0),
     usedBytes: Number(data.used_bytes || 0),
-    quotaBytes: Number(data.quota_bytes || 500 * 1024 * 1024),
+    quotaBytes: Number(data.quota_bytes || 100 * 1024 * 1024),
+    securityAlerts: Array.isArray(data.security_alerts)
+      ? data.security_alerts.map((a: any) => ({
+          id: String(a.id),
+          filename: String(a.filename || 'File'),
+          threatName: String(a.threat_name || 'Malware detected'),
+          createdAt: String(a.created_at || ''),
+          message: String(
+            a.message ||
+              `Security Alert: '${a.filename || 'File'}' was infected and has been automatically removed from your vault.`
+          ),
+        }))
+      : [],
   };
+}
+
+/** Dismiss an infected file security alert notification */
+export async function apiDismissSecurityAlert(alertId: string): Promise<void> {
+  await apiFetch(`/files/alerts/${alertId}/dismiss`, {
+    method: 'POST',
+  }).catch(() => {});
 }
 
 /** Rename or update metadata of a stored vault file */
@@ -742,12 +763,48 @@ export async function apiDownloadFile(fileId: string, filename: string): Promise
   setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
 }
 
-/** Fetch user's real security & file audit logs from PostgreSQL */
-export async function apiGetActivityLogs(limit = 50): Promise<ActivityItem[]> {
-  const res = await apiFetch(`/files/activity/logs?limit=${limit}`);
+/** Fetch user's real security & file audit logs with pagination from database */
+export async function apiGetActivityLogs(
+  page = 1,
+  limit = 10
+): Promise<{ activities: ActivityItem[]; totalCount: number; hasMore: boolean; page: number }> {
+  const res = await apiFetch(`/files/activity/logs?page=${page}&limit=${limit}`);
   if (!res.ok) {
-    return [];
+    return { activities: [], totalCount: 0, hasMore: false, page };
   }
   const data = await res.json();
-  return Array.isArray(data.activities) ? data.activities : [];
+  return {
+    activities: Array.isArray(data.activities) ? data.activities : [],
+    totalCount: Number(data.total_count || 0),
+    hasMore: Boolean(data.has_more),
+    page: Number(data.page || page),
+  };
+}
+
+/** Send a chat query to Vault Assistant powered by Claude Haiku & pgvector */
+export async function apiSendChatMessage(content: string, conversationId?: string): Promise<{
+  id: string;
+  sender: 'assistant';
+  content: string;
+  sources: string[];
+  tokens_used: number;
+  created_at: string;
+}> {
+  const res = await apiFetch('/chat/message', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content, conversation_id: conversationId }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.detail || 'Assistant query failed.');
+  }
+  return res.json();
+}
+
+/** Fetch user's Claude token usage breakdown (input vs output tokens per model) */
+export async function apiGetTokenUsage(): Promise<import('../types').UserTokenSummary | null> {
+  const res = await apiFetch('/tokens/my-usage');
+  if (!res.ok) return null;
+  return res.json();
 }

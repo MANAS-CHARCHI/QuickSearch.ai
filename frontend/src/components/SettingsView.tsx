@@ -1,9 +1,8 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   User,
   Check,
   Database,
-  Cpu,
   Lock,
   Download,
   Trash2,
@@ -11,10 +10,12 @@ import {
   Terminal,
   Laptop,
   ShieldCheck,
+  Sparkles,
 } from "lucide-react";
-import { UserProfile } from "../types";
+import { UserProfile, UserTokenSummary } from "../types";
 import { DevicesModal } from "./DevicesModal";
 import { PasswordModal } from "./PasswordModal";
+import { apiGetTokenUsage } from "../services/api";
 
 interface SettingsViewProps {
   currentUser?: UserProfile | null;
@@ -29,7 +30,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   onUpdateFullName,
   onLogout,
   usedBytes = 0,
-  quotaBytes = 500 * 1024 * 1024,
+  quotaBytes = 100 * 1024 * 1024,
 }) => {
   const usedMb = (usedBytes / (1024 * 1024)).toFixed(2);
   const quotaMb = Math.round(quotaBytes / (1024 * 1024));
@@ -40,6 +41,19 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [saved, setSaved] = useState(false);
   const [showDevicesModal, setShowDevicesModal] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [tokenSummary, setTokenSummary] = useState<UserTokenSummary | null>(null);
+
+  useEffect(() => {
+    async function loadTokens() {
+      try {
+        const data = await apiGetTokenUsage();
+        if (data) setTokenSummary(data);
+      } catch (e) {
+        // Ignore token fetch errors
+      }
+    }
+    loadTokens();
+  }, []);
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
@@ -52,49 +66,66 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
   return (
     <div className="max-w-2xl mx-auto space-y-3 font-mono pb-20">
-      <div className="pb-1.5 border-b border-stone-200 dark:border-stone-800">
-        <h2 className="text-xs font-semibold text-stone-900 dark:text-white flex items-center">
-          <Terminal className="w-3.5 h-3.5 mr-1.5 text-stone-500" />
-          vault/config
-        </h2>
-        <p className="text-[10px] text-stone-500 dark:text-stone-400">
-          infrastructure limits, credentials, active sessions, and compliance
-        </p>
-      </div>
+      
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
         {/* S3 Storage Quota */}
         <div className="bg-white dark:bg-[#1C1510] border border-orange-200/80 dark:border-[#2D2118] rounded-xl p-3 space-y-2 shadow-val">
           <div className="flex items-center justify-between text-xs">
             <span className="flex items-center font-medium text-stone-800 dark:text-stone-200">
-              <Database className="w-3.5 h-3.5 text-stone-400 mr-1.5" /> s3
-              storage
+              <Database className="w-3.5 h-3.5 text-stone-400 mr-1.5" />storage
             </span>
-            <span className="text-[10px] text-stone-500">{usedMb} MB / {quotaMb} MB</span>
+            <span className="text-[10px] text-stone-500 font-mono">{usedMb} MB / {quotaMb} MB</span>
           </div>
           <div className="w-full bg-orange-100/50 dark:bg-[#251A12] rounded-full h-1 overflow-hidden">
             <div className="bg-emerald-500 h-1 rounded-full transition-all" style={{ width: `${usedPercent}%` }} />
           </div>
           <p className="text-[9px] text-stone-400">
-            AWS SSE-KMS per-user prefix isolation
+            100 MB free storage limit • AWS SSE-KMS prefix isolation
           </p>
         </div>
 
-        {/* AI Token Budget */}
+        {/* AI Token Usage (Calculated from dedicated SQLite database) */}
         <div className="bg-white dark:bg-[#1C1510] border border-orange-200/80 dark:border-[#2D2118] rounded-xl p-3 space-y-2 shadow-val">
           <div className="flex items-center justify-between text-xs">
             <span className="flex items-center font-medium text-stone-800 dark:text-stone-200">
-              <Cpu className="w-3.5 h-3.5 text-stone-400 mr-1.5" /> monthly
+              <Sparkles className="w-3.5 h-3.5 text-amber-500 mr-1.5" /> ai
               tokens
             </span>
-            <span className="text-[10px] text-stone-500">1,240 / 50,000</span>
+            <span className="text-[10px] text-stone-500 font-bold font-mono">
+              {tokenSummary ? tokenSummary.total_tokens.toLocaleString() : '0'} tokens
+            </span>
           </div>
-          <div className="w-full bg-orange-100/50 dark:bg-[#251A12] rounded-full h-1 overflow-hidden">
-            <div className="bg-orange-500 h-1 rounded-full w-[5%]" />
+
+          <div className="grid grid-cols-2 gap-2 text-[10px] bg-orange-50/50 dark:bg-[#251A12] p-1.5 rounded-lg border border-orange-200/50 dark:border-[#382A20]">
+            <div>
+              <span className="text-stone-400 block text-[9px]">Input Tokens</span>
+              <span className="font-semibold text-stone-800 dark:text-stone-200 font-mono">
+                {tokenSummary ? tokenSummary.total_input_tokens.toLocaleString() : '0'}
+              </span>
+            </div>
+            <div>
+              <span className="text-stone-400 block text-[9px]">Output Tokens</span>
+              <span className="font-semibold text-stone-800 dark:text-stone-200 font-mono">
+                {tokenSummary ? tokenSummary.total_output_tokens.toLocaleString() : '0'}
+              </span>
+            </div>
           </div>
-          <p className="text-[9px] text-stone-400">
-            resets on 1st of every month
-          </p>
+
+          <div className="flex items-center justify-between text-[9px] text-stone-400 pt-0.5">
+            <span>
+              Requests:{" "}
+              <span className="text-stone-600 dark:text-stone-300 font-semibold font-mono">
+                {tokenSummary?.total_requests || 0}
+              </span>
+            </span>
+            <span>
+              AI Spend:{" "}
+              <span className="text-emerald-600 dark:text-emerald-400 font-semibold font-mono">
+                ${(tokenSummary?.total_cost_usd || 0).toFixed(5)} (₹{((tokenSummary?.total_cost_inr !== undefined ? tokenSummary.total_cost_inr : (tokenSummary?.total_cost_usd || 0) * 86.0)).toFixed(3)})
+              </span>
+            </span>
+          </div>
         </div>
       </div>
 

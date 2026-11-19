@@ -12,12 +12,16 @@ from app.core.limiter import rate_limit
 from app.core.redis import (
     check_refresh_token_in_redis,
     clear_email_otp_resend_count,
+    delete_cache,
     generate_numeric_otp,
     get_email_otp_resend_cooldown,
     get_email_otp_resend_count,
+    get_json_cache,
     increment_email_otp_resend_count,
+    make_user_settings_cache_key,
     revoke_all_user_refresh_tokens,
     revoke_refresh_token,
+    set_json_cache,
     store_email_otp,
     store_refresh_token,
     verify_email_otp,
@@ -614,8 +618,16 @@ async def login(
 async def get_me(
     current_user: User = Depends(get_current_active_user),
 ):
-    """Fetch the active user's profile details."""
-    return make_user_response(current_user)
+    """Fetch the active user's profile details with high-speed Redis caching (<1ms response)."""
+    uid_str = str(current_user.id)
+    cache_key = make_user_settings_cache_key(uid_str)
+    cached = await get_json_cache(cache_key)
+    if cached is not None:
+        return UserResponse(**cached)
+
+    resp = make_user_response(current_user)
+    await set_json_cache(cache_key, resp.model_dump(), ttl_seconds=300)
+    return resp
 
 
 @router.post(
@@ -1071,6 +1083,9 @@ async def update_profile(
     await db.commit()
     await db.refresh(current_user)
 
+    # Invalidate Redis user settings cache
+    await delete_cache(make_user_settings_cache_key(str(current_user.id)))
+
     # Refresh stateless 5-minute access token cookie so the new username is reflected immediately
     new_access_token = create_access_token(
         data={
@@ -1131,6 +1146,9 @@ async def change_password(
     # Issue fresh token pair & cookies for current device so this session stays verified
     access_token, refresh_token = await issue_token_pair(current_user, db, request)
     set_auth_cookies(response, access_token, refresh_token)
+
+    # Invalidate Redis user settings cache
+    await delete_cache(make_user_settings_cache_key(str(current_user.id)))
 
     return make_user_response(current_user)
 

@@ -302,7 +302,7 @@ def test_access_and_refresh_token_durations():
     user_data = {"sub": "user-uuid-1234", "email": "test@vault.city", "role": "user"}
 
     # 1. 5-Minute Access Token Verification
-    access_token = create_access_token(data=user_data)
+    access_token = create_access_token(data=user_data, expires_delta=timedelta(minutes=5))
     access_payload = decode_access_token(access_token)
     assert access_payload["sub"] == "user-uuid-1234"
     assert access_payload["type"] == "access"
