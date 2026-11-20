@@ -217,12 +217,12 @@ def _extract_document_sync(
         texts: List[str] = []
         page_count = max(1, len(reader.pages))
         for idx, page in enumerate(reader.pages, start=1):
-            txt = (page.extract_text() or "").strip()
+            txt = (page.extract_text() or "").replace("\x00", "").strip()
             pages.append({"page_number": idx, "text": txt, "source_type": "text"})
             if txt:
                 texts.append(txt)
 
-        full_text = "\n\n".join(texts).strip()
+        full_text = "\n\n".join(texts).replace("\x00", "").strip()
         if not full_text:
             full_text = f"Scanned PDF document ({page_count} page(s)): {filename}"
             pages = [{"page_number": 1, "text": full_text, "source_type": "scanned_pdf"}]
@@ -260,9 +260,10 @@ def _inspect_text_security(raw_text: str) -> Tuple[str, Optional[str], Dict[str,
     """
     import unicodedata
 
-    invisible_count = len(INVISIBLE_CHARS_RE.findall(raw_text or ""))
-    stripped = INVISIBLE_CHARS_RE.sub("", raw_text or "")
-    normalized = unicodedata.normalize("NFKC", stripped).strip()
+    clean_raw = (raw_text or "").replace("\x00", "")
+    invisible_count = len(INVISIBLE_CHARS_RE.findall(clean_raw))
+    stripped = INVISIBLE_CHARS_RE.sub("", clean_raw)
+    normalized = unicodedata.normalize("NFKC", stripped).replace("\x00", "").strip()
 
     decoded_b64: List[str] = []
     for match in BASE64_CANDIDATE_RE.findall(normalized):
@@ -318,7 +319,7 @@ def _chunk_text(pages: List[Dict[str, Any]], chunk_size: int = 1000, overlap: in
     chunks: List[Dict[str, Any]] = []
     chunk_idx = 0
     for page in pages:
-        text = (page.get("text") or "").strip()
+        text = (page.get("text") or "").replace("\x00", "").strip()
         if not text:
             continue
         page_num = int(page.get("page_number", 1))
@@ -541,10 +542,13 @@ async def _extract_and_summarize(
     resolved_category = summary_info.get("category_hint") or category_hint
     engine = f"{engine}+{summary_info.get('engine', 'haiku')}"
     return {
-        "full_text": full_text,
-        "summary": summary,
-        "visible_text": visible_text,
-        "pages": pages,
+        "full_text": (full_text or "").replace("\x00", ""),
+        "summary": (summary or "").replace("\x00", ""),
+        "visible_text": (visible_text or "").replace("\x00", ""),
+        "pages": [
+            {**p, "text": (p.get("text") or "").replace("\x00", "")}
+            for p in pages
+        ],
         "page_count": page_count,
         "doc_type": resolved_doc_type,
         "category_hint": resolved_category,
@@ -969,6 +973,8 @@ async def process_uploaded_file(
                     details={"threat_name": None, "security": security_details, "sha256": actual_sha256},
                 )
                 await db.commit()
+                from app.core.redis import delete_cache, make_user_files_cache_key
+                await delete_cache(make_user_files_cache_key(uid_str))
                 log_file_event(
                     "SECURITY_GATE",
                     "blocked",
@@ -1036,7 +1042,7 @@ async def process_uploaded_file(
                 {
                     "page_number": p["page_number"],
                     "source_type": p.get("source_type", "text"),
-                    "text": _inspect_text_security(p.get("text", ""))[0],
+                    "text": _inspect_text_security(p.get("text", ""))[0].replace("\x00", ""),
                 }
                 for p in pages
             ]
@@ -1046,7 +1052,7 @@ async def process_uploaded_file(
                     {
                         "chunk_index": 0,
                         "page_number": 1,
-                        "content": normalized_text or fname,
+                        "content": (normalized_text or fname).replace("\x00", ""),
                         "source_type": "text",
                     }
                 ]
@@ -1055,8 +1061,8 @@ async def process_uploaded_file(
                 {
                     "chunk_index": c["chunk_index"],
                     "page_number": c["page_number"],
-                    "content": c["content"],
-                    "embedding": _embed_chunk_text(c["content"], settings.VECTOR_DIMENSION),
+                    "content": (c["content"] or "").replace("\x00", ""),
+                    "embedding": _embed_chunk_text((c["content"] or "").replace("\x00", ""), settings.VECTOR_DIMENSION),
                     "metadata_json": {
                         "filename": fname,
                         "category": file_record.category,
@@ -1087,9 +1093,10 @@ async def process_uploaded_file(
                 "duration_ms": round(t_vec, 1),
             })
 
+            clean_summary = (doc_summary or "").replace("\x00", "")
             scan_report = {
-                "summary": doc_summary,
-                "extracted_text_preview": (visible_text or "")[:1200],
+                "summary": clean_summary,
+                "extracted_text_preview": ((visible_text or "")[:1200]).replace("\x00", ""),
                 "vision_engine": vision_engine,
                 "av_engine": av_engine,
                 "av_status": "clean",
@@ -1106,8 +1113,8 @@ async def process_uploaded_file(
             file_record.document_type = doc_type
             file_record.page_count = page_count
             file_record.is_pii = is_pii
-            file_record.description = doc_summary
-            file_record.pages_json = json.dumps(scan_report, ensure_ascii=False)
+            file_record.description = clean_summary
+            file_record.pages_json = json.dumps(scan_report, ensure_ascii=False).replace("\x00", "")
             file_record.updated_at = datetime.utcnow()
 
             await _log_audit(
@@ -1159,24 +1166,39 @@ async def process_uploaded_file(
             total_ms = (time.perf_counter() - pipeline_start) * 1000.0
             logger.exception("Ingestion failed for file_id=%s: %s", file_id, exc)
             await s3_service.delete_from_quarantine(quarantine_key)
-            file_record.scan_status = "failed"
-            file_record.description = f"Processing error: {exc}"
-            file_record.pages_json = json.dumps({
-                "summary": file_record.description,
-                "error": str(exc),
-                "total_duration_ms": round(total_ms, 1),
-                "steps": steps,
-            })
-            file_record.updated_at = datetime.utcnow()
-            await _log_audit(
-                db,
-                user_id=user_id,
-                action="file_processing_failed",
-                file_id=file_id,
-                status_str="error",
-                details={"error": str(exc)},
-            )
-            await db.commit()
+            try:
+                await db.rollback()
+            except Exception:
+                pass
+            try:
+                res = await db.execute(
+                    select(FileDocument).where(
+                        FileDocument.id == file_id,
+                        FileDocument.user_id == user_id,
+                    )
+                )
+                refreshed = res.scalar_one_or_none()
+                if refreshed:
+                    refreshed.scan_status = "failed"
+                    refreshed.description = f"Processing error: {exc}".replace("\x00", "")
+                    refreshed.pages_json = json.dumps({
+                        "summary": refreshed.description,
+                        "error": str(exc).replace("\x00", ""),
+                        "total_duration_ms": round(total_ms, 1),
+                        "steps": steps,
+                    }, ensure_ascii=False).replace("\x00", "")
+                    refreshed.updated_at = datetime.utcnow()
+                    await _log_audit(
+                        db,
+                        user_id=user_id,
+                        action="file_processing_failed",
+                        file_id=file_id,
+                        status_str="error",
+                        details={"error": str(exc).replace("\x00", "")},
+                    )
+                    await db.commit()
+            except Exception as save_err:
+                logger.error("Failed to commit failed status for file_id=%s: %s", file_id, save_err)
             from app.core.redis import delete_cache, make_user_files_cache_key
             await delete_cache(make_user_files_cache_key(uid_str))
             log_file_event(

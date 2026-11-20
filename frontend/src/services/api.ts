@@ -95,6 +95,21 @@ export function setAuthSession(_tokens?: AuthTokens, user?: UserProfile): void {
 export function clearAuthSession(): void {
   purgeLegacyTokens();
   localStorage.removeItem(USER_KEY);
+  try {
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const key = localStorage.key(i);
+      if (
+        key &&
+        (key.startsWith("vault_activities_cache_") ||
+          key.toLowerCase().includes("infected") ||
+          key.toLowerCase().includes("virus") ||
+          key.toLowerCase().includes("malware") ||
+          key.toLowerCase().includes("eicar"))
+      ) {
+        localStorage.removeItem(key);
+      }
+    }
+  } catch (_) {}
 }
 
 /**

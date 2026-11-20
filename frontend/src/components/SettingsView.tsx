@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import {
   User,
   Check,
+  Smartphone,
   Database,
   Lock,
   Download,
@@ -15,6 +16,7 @@ import { UserProfile, UserTokenSummary } from "../types";
 import { DevicesModal } from "./DevicesModal";
 import { PasswordModal } from "./PasswordModal";
 import { apiGetTokenUsage } from "../services/api";
+import { usePwa } from "../pwa/usePwa";
 
 interface SettingsViewProps {
   currentUser?: UserProfile | null;
@@ -31,6 +33,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   usedBytes = 0,
   quotaBytes = 100 * 1024 * 1024,
 }) => {
+  const { isInstallable, isInstalled, installApp } = usePwa();
   const usedMb = (usedBytes / (1024 * 1024)).toFixed(2);
   const quotaMb = Math.round(quotaBytes / (1024 * 1024));
   const usedPercent = Math.min(100, Math.max(usedBytes > 0 ? 1 : 0, Math.round((usedBytes / Math.max(1, quotaBytes)) * 100)));
@@ -246,6 +249,51 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             </p>
           )}
         </form>
+      </div>
+
+      {/* Progressive Web App (PWA) Management */}
+      <div className="bg-white dark:bg-[#1C1510] border border-orange-200/80 dark:border-[#2D2118] rounded-xl p-3.5 space-y-2.5 shadow-val">
+        <div className="flex items-center justify-between pb-1 border-b border-orange-100 dark:border-[#281D15]">
+          <h3 className="text-xs font-semibold text-stone-900 dark:text-white flex items-center">
+            <Smartphone className="w-3.5 h-3.5 mr-1.5 text-orange-500" /> progressive web app (pwa)
+          </h3>
+          <span className="text-[10px] text-stone-400 font-mono">
+            {isInstalled ? "installed standalone" : isInstallable ? "ready to install" : "offline capable"}
+          </span>
+        </div>
+
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+          <div>
+            <p className="text-xs font-medium text-stone-800 dark:text-stone-200">
+              {isInstalled ? "Installed as Desktop / Mobile App" : "Install on this Device"}
+            </p>
+            <p className="text-[10px] text-stone-400">
+              {isInstalled
+                ? "Running with offline app shell, instant cache launch, and standalone window."
+                : "Add Vault City to your Home Screen or Desktop for instant offline access and native window frame."}
+            </p>
+          </div>
+
+          {isInstallable ? (
+            <button
+              type="button"
+              onClick={installApp}
+              className="flex items-center justify-center space-x-1.5 px-3 py-1.5 bg-orange-600 hover:bg-orange-700 text-white dark:bg-orange-500 dark:hover:bg-orange-400 dark:text-stone-950 rounded-lg text-xs font-mono font-semibold transition-all cursor-pointer shadow-xs shrink-0"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>install app</span>
+            </button>
+          ) : isInstalled ? (
+            <div className="flex items-center space-x-1 text-emerald-600 dark:text-emerald-400 text-xs font-mono shrink-0">
+              <Check className="w-3.5 h-3.5" />
+              <span>active</span>
+            </div>
+          ) : (
+            <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-mono shrink-0">
+              service worker active
+            </span>
+          )}
+        </div>
       </div>
 
       {/* GDPR Data Export & Purge */}

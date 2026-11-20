@@ -6,6 +6,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.document_chunk import DocumentChunk
 
 
+def _sanitize_for_pg(val: Any) -> Any:
+    if isinstance(val, str):
+        return val.replace("\x00", "")
+    if isinstance(val, dict):
+        return {k: _sanitize_for_pg(v) for k, v in val.items()}
+    if isinstance(val, list):
+        return [_sanitize_for_pg(x) for x in val]
+    return val
+
+
 class PgVectorService:
     """PostgreSQL pgvector service for tenant-isolated vector storage and similarity search."""
 
@@ -45,9 +55,9 @@ class PgVectorService:
                 user_id=user_id,
                 chunk_index=chunk["chunk_index"],
                 page_number=chunk.get("page_number", 1),
-                content=chunk["content"],
+                content=(chunk["content"] or "").replace("\x00", ""),
                 embedding=chunk["embedding"],
-                metadata_json=chunk.get("metadata_json"),
+                metadata_json=_sanitize_for_pg(chunk.get("metadata_json")),
             )
             for chunk in chunks
         ]

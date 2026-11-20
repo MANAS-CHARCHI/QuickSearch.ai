@@ -45,6 +45,7 @@ app.add_middleware(
 
 # Route aggregation
 app.include_router(health_router, prefix=settings.API_V1_STR)
+app.include_router(health_router)
 app.include_router(auth_router, prefix=settings.API_V1_STR)
 app.include_router(files_router, prefix=settings.API_V1_STR)
 app.include_router(chat_router, prefix=settings.API_V1_STR)

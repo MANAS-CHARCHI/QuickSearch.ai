@@ -1,0 +1,94 @@
+networks:
+  vault_prod_net:
+    name: vault_prod_net
+    driver: bridge
+
+volumes:
+  postgres_prod_data:
+    name: vault_postgres_prod_data
+  redis_prod_data:
+    name: vault_redis_prod_data
+
+services:
+  # ---------------------------------------------------------------------------
+  # 1. PostgreSQL 16 with pgvector Extension
+  # ---------------------------------------------------------------------------
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: vault_prod_db
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-vault_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-vault_secure_password}
+      POSTGRES_DB: ${POSTGRES_DB:-vault_db}
+    volumes:
+      - postgres_prod_data:/var/lib/postgresql/data
+      - ./docker/db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-vault_user} -d ${POSTGRES_DB:-vault_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - vault_prod_net
+
+  # ---------------------------------------------------------------------------
+  # 2. Redis 7 Cache & Rate Limiter (Password Protected)
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: vault_prod_redis
+    restart: always
+    command: >
+      sh -c "redis-server --appendonly yes --requirepass \"${REDIS_PASSWORD:-vault_secure_redis_pass}\""
+    volumes:
+      - redis_prod_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-vault_secure_redis_pass}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    networks:
+      - vault_prod_net
+
+  # ---------------------------------------------------------------------------
+  # 3. FastAPI Backend Service
+  # ---------------------------------------------------------------------------
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: vault_backend:prod
+    container_name: vault_prod_backend
+    restart: always
+    command: [
+      "uvicorn", "app.main:app",
+      "--host", "0.0.0.0",
+      "--port", "8000",
+      "--workers", "4",
+      "--proxy-headers",
+      "--forwarded-allow-ips", "*"
+    ]
+    env_file:
+      - .env.prod
+    # INBOUND COMMUNICATION:
+    # Strictly binds port 8000 to the host loopback interface (127.0.0.1).
+    # Outside internet CANNOT access port 8000 directly. Only the host reverse proxy (Nginx) can talk to it.
+    ports:
+      - "127.0.0.1:8000:8000"
+    # OUTBOUND COMMUNICATION:
+    # Explicit public DNS resolvers to ensure the container can reach AWS S3, AWS Lambda, Gmail SMTP, and AI APIs.
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
+    volumes:
+      - ./logs:/app/logs
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - vault_prod_net

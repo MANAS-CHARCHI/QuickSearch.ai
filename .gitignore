@@ -32,6 +32,7 @@ yarn-error.log*
 **/.env
 **/.env.*
 !**/.env.example
+!**/.env*.example
 
 # Local Data, Storage & Database files
 postgres_data/

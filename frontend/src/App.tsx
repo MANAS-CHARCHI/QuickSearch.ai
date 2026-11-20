@@ -5,6 +5,7 @@ import { UploadView } from './components/UploadView';
 import { ChatView } from './components/ChatView';
 import { ActivityView } from './components/ActivityView';
 import { SettingsView } from './components/SettingsView';
+import { PwaInstallButton } from './components/PwaInstallButton';
 import { AuthView } from './components/AuthView';
 import { ShareModal } from './components/ShareModal';
 import { TabType, DocumentFile, ChatMessage, ActivityItem, StagedFile, UserProfile, StagedPage, SecurityAlert } from './types';
@@ -171,15 +172,74 @@ export function App() {
   });
 
   const [documents, setDocuments] = useState<DocumentFile[]>([]);
-  // User Device Cache (Browser LocalStorage) for instant 0ms activity loading
+// Strict filter to ensure infected/malware file traces are NEVER stored in localStorage or client cache
+const isInfectedFileItem = (item: any): boolean => {
+  if (!item) return false;
+  const action = String(item.action || "").toLowerCase();
+  const target = String(item.target || "").toLowerCase();
+  const status = String(item.status || "").toLowerCase();
+  const name = String(item.name || item.filename || "").toLowerCase();
+
+  return (
+    action.includes("infected") ||
+    action.includes("malware") ||
+    action.includes("virus") ||
+    target.includes("eicar") ||
+    target.includes("infected") ||
+    target.includes("malware") ||
+    name.includes("eicar") ||
+    status === "infected" ||
+    status === "blocked"
+  );
+};
+
+// Scrub any infected file records or malicious tokens from browser localStorage completely
+const scrubInfectedLocalStorage = (): void => {
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (!key) continue;
+
+      if (key.startsWith("vault_activities_cache_")) {
+        const raw = localStorage.getItem(key);
+        if (raw) {
+          try {
+            const list = JSON.parse(raw);
+            if (Array.isArray(list)) {
+              const clean = list.filter((item) => !isInfectedFileItem(item));
+              if (clean.length !== list.length) {
+                localStorage.setItem(key, JSON.stringify(clean));
+              }
+            }
+          } catch (_) {}
+        }
+      } else {
+        const lowerKey = key.toLowerCase();
+        if (
+          lowerKey.includes("infected") ||
+          lowerKey.includes("eicar") ||
+          lowerKey.includes("virus") ||
+          lowerKey.includes("malware")
+        ) {
+          localStorage.removeItem(key);
+        }
+      }
+    }
+  } catch (_) {}
+};
+
+  // User Device Cache (Browser LocalStorage) for instant 0ms activity loading (strictly excludes any infected file data)
   const [activities, setActivities] = useState<ActivityItem[]>(() => {
+    scrubInfectedLocalStorage();
     const user = getStoredUser();
     if (user?.id) {
       try {
         const cached = localStorage.getItem('vault_activities_cache_' + user.id);
         if (cached) {
           const parsed = JSON.parse(cached);
-          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            return parsed.filter((item: ActivityItem) => !isInfectedFileItem(item));
+          }
         }
       } catch (e) {}
     }
@@ -254,12 +314,15 @@ export function App() {
         isLoadingMore: false,
       });
 
-      // Cache the last 10 activities on user's device (browser cache)
+      // Cache the last 10 activities on user's device (browser cache) - NEVER store infected file data
       if (currentUser?.id && logsData.activities.length > 0) {
         try {
+          const safeActivities = logsData.activities
+            .filter((item) => !isInfectedFileItem(item))
+            .slice(0, 10);
           localStorage.setItem(
             'vault_activities_cache_' + currentUser.id,
-            JSON.stringify(logsData.activities.slice(0, 10))
+            JSON.stringify(safeActivities)
           );
         } catch (e) {}
       }
@@ -303,14 +366,16 @@ export function App() {
   };
 
   useEffect(() => {
+    scrubInfectedLocalStorage();
     if (currentUser) {
-      // Immediate load from browser device cache on user switch
+      // Immediate load from browser device cache on user switch (strictly excluding infected files)
       try {
         const cached = localStorage.getItem('vault_activities_cache_' + currentUser.id);
         if (cached) {
           const parsed = JSON.parse(cached);
           if (Array.isArray(parsed) && parsed.length > 0) {
-            setActivities(parsed);
+            const clean = parsed.filter((item: ActivityItem) => !isInfectedFileItem(item));
+            setActivities(clean);
           }
         }
       } catch (e) {}
@@ -552,11 +617,14 @@ export function App() {
   // If not logged in, render the Auth View (Login, Sign In, Password Reset)
   if (!currentUser) {
     return (
-      <AuthView
-        onLoginSuccess={handleLoginSuccess}
-        isDark={isDark}
-        onToggleTheme={toggleTheme}
-      />
+      <>
+        <AuthView
+          onLoginSuccess={handleLoginSuccess}
+          isDark={isDark}
+          onToggleTheme={toggleTheme}
+        />
+        <PwaInstallButton variant="floating" />
+      </>
     );
   }
 
@@ -929,6 +997,9 @@ export function App() {
         onClose={() => setSharingDoc(null)}
         activePageIdx={activePageIdx}
       />
+
+      {/* Small floating button to download PWA (Browser Screen Only) */}
+      <PwaInstallButton variant="floating" />
     </div>
   );
 }
